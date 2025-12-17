@@ -7,6 +7,7 @@ class Cutter:
     def __init__(self, length, width, height, max_len, max_width, max_height, min_len, min_width, min_height):
         # List of available spaces to be cut
         self.spaces = [(length, width, height)]
+        self.boxes = []
         self.length = length
         self.width = width
         self.height = height
@@ -16,9 +17,9 @@ class Cutter:
         self.min_len = min_len
         self.min_width = min_width
         self.min_height = min_height
-        self.boxes = []
 
     def cut(self):
+        self.reset()
         continue_flag = True
         res = []
         while continue_flag:
@@ -92,11 +93,13 @@ class Cutter:
 #     for b in boxes:
 #         print(b)
 #     print("Total boxes:", cutter.get_box_count())
-#     cutter.reset()
+#     print("--------------------------------------")
+#     cutter.cut()
 #     boxes = cutter.get_boxes()
 #     for b in boxes:
 #         print(b)
 #     print("Total boxes:", cutter.get_box_count())
+#     print("--------------------------------------")
 #     cutter.cut()
 #     boxes = cutter.get_boxes()
 #     for b in boxes:
