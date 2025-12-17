@@ -1,5 +1,7 @@
 import random
 import copy
+from box import Box
+
 class Cutter:
     def __init__(self, length, width, height, max_len, max_width, max_height, min_len, min_width, min_height):
         # List of available spaces to be cut
@@ -13,6 +15,7 @@ class Cutter:
         self.min_len = min_len
         self.min_width = min_width
         self.min_height = min_height
+        self.boxes = []
 
     def cut(self):
         continue_flag = True
@@ -30,15 +33,19 @@ class Cutter:
                     res.append(box2)
             self.spaces = copy.deepcopy(res)
             res.clear()
+        
+        for space in self.spaces:
+            self.boxes.append(Box(space[0], space[1], space[2], (0, 1000)))
     
     def get_boxes(self):
-        return self.spaces
+        return self.boxes
 
     def get_box_count(self):
-        return len(self.spaces)
+        return len(self.boxes)
     
     def reset(self):
         self.spaces = [(self.length, self.width, self.height)]
+        self.boxes.clear()
     
     def _check_box(self, box):
         x_flag = box[0] < self.min_len or box[0] > self.max_len
@@ -76,3 +83,21 @@ class Cutter:
             box1 = (box[0], box[1], pos)
             box2 = (box[0], box[1], box[2] - pos)
         return box1, box2
+
+# if __name__ == "__main__":
+#     cutter = Cutter(10, 10, 10, 5, 5, 5, 2, 2, 2)
+#     cutter.cut()
+#     boxes = cutter.get_boxes()
+#     for b in boxes:
+#         print(b)
+#     print("Total boxes:", cutter.get_box_count())
+#     cutter.reset()
+#     boxes = cutter.get_boxes()
+#     for b in boxes:
+#         print(b)
+#     print("Total boxes:", cutter.get_box_count())
+#     cutter.cut()
+#     boxes = cutter.get_boxes()
+#     for b in boxes:
+#         print(b)
+#     print("Total boxes:", cutter.get_box_count())
