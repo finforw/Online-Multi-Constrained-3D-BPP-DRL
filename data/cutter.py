@@ -1,5 +1,6 @@
 import random
 import copy
+import util
 from box import Box
 
 class Cutter:
@@ -35,7 +36,7 @@ class Cutter:
             res.clear()
         
         for space in self.spaces:
-            self.boxes.append(Box(space[0], space[1], space[2], (0, 1000)))
+            self.boxes.append(Box(space[0], space[1], space[2], util.get_time_range()))
     
     def get_boxes(self):
         return self.boxes
