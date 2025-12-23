@@ -1,10 +1,10 @@
 import random
 import copy
-import util
-from box import Box
+from . import util
+from .box import Box
 
 class Cutter:
-    def __init__(self, length, width, height, max_len, max_width, max_height, min_len, min_width, min_height):
+    def __init__(self, length, width, height, max_len=5, max_width=5, max_height=5, min_len=2, min_width=2, min_height=2):
         # List of available spaces to be cut
         self.spaces = [(length, width, height)]
         self.boxes = []
@@ -37,7 +37,11 @@ class Cutter:
             res.clear()
         
         for space in self.spaces:
-            self.boxes.append(Box(space[0], space[1], space[2], util.get_time_range()))
+            self.boxes.append(Box(space[0], space[1], space[2], util.get_time_range()).to_numpy_array())
+
+    def generate_boxes(self):
+        self.cut()
+        return self.boxes
     
     def get_boxes(self):
         return self.boxes
