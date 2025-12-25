@@ -29,27 +29,24 @@ class BinPackingEnv(gym.Env):
         return self._get_obs(), {}
 
     def step(self, action):
-        # x, y = divmod(action, self.bin_size[1])
-        # item_l, item_w, item_h = self.current_item
+        # This function should be implemented to handle the following:
+        # 1. Apply the action and update the observation space
+        # 2. Calculate reward and whether the episode is done
         
-        # # 1. Check constraints (Does it fit within bin boundaries?)
-        # if x + item_l > self.bin_size[0] or y + item_w > self.bin_size[1]:
-        #     reward = -1  # Penalty for invalid move
-        #     terminated = True
-        # else:
-        #     # 2. Check stability/height and update heightmap
-        #     current_max_h = np.max(self.heightmap[x:x+item_l, y:y+item_w])
-        #     if current_max_h + item_h > self.bin_size[2]:
-        #         reward = -1 # Overflows bin height
-        #         terminated = True
-        #     else:
-        #         self.heightmap[x:x+item_l, y:y+item_w] = current_max_h + item_h
-        #         reward = (item_l * item_w * item_h) / np.prod(self.bin_size) # Volume utilization
-        #         terminated = False
-        
-        # self.current_item = self._generate_item()
-        # return self._get_obs(), reward, terminated, False, {}
-        return self._get_obs(), 1, False, False, {}
+        # Action will be bottom-left-front corner of the item placement.
+        x, y = divmod(action, self.bin_size[1])
+        raw_data = self.items[self.current_item_index]
+        item_l, item_w, item_h = map(int, raw_data[:3])
+        arrival_time, weight = raw_data[3:]
+
+        # Update heightmap and next item index.
+        current_max_height = np.max(self.heightmap[x:x+item_l, y:y+item_w])
+        self.heightmap[x:x+item_l, y:y+item_w] = current_max_height + item_h
+        self.current_item_index += 1
+        # Calculate reward and termination state.
+        reward = 10 * (item_l * item_w * item_h) / np.prod(self.bin_size) # volume utilization reward
+        terminated = self.current_item_index >= len(self.items)
+        return self._get_obs(), reward, terminated, False, {}
 
     def _get_obs(self):
         return {"heightmap": self.heightmap.copy(), "item": self.items[self.current_item_index]}
@@ -65,9 +62,15 @@ class BinPackingEnv(gym.Env):
 #     env = BinPackingEnv()
 #     obs = env.reset()
 #     print("initial: " + str(obs))
-#     for _ in range(2):
-#         action = env.action_space.sample()
-#         obs, reward, terminated, truncated, info = env.step(action)
-#         print("------------------------------------")
-#         print(obs, reward, terminated, truncated, info)
-#         print("------------------------------------")
+#     action = 0
+#     print("action: " + divmod(action, env.bin_size[1]).__str__())
+#     obs, reward, terminated, truncated, info = env.step(action)
+#     print("------------------------------------")
+#     print(obs, reward, terminated, truncated, info)
+#     print("------------------------------------")
+#     action = 50
+#     print("action: " + divmod(action, env.bin_size[1]).__str__())
+#     obs, reward, terminated, truncated, info = env.step(action)
+#     print("------------------------------------")
+#     print(obs, reward, terminated, truncated, info)
+#     print("------------------------------------")
