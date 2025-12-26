@@ -27,6 +27,7 @@ class BinPackingEnv(gym.Env):
             "item": spaces.Box(low=1, high=max(bin_size), shape=(5,), dtype=np.float32)
         })
 
+        self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self.placed_items = []
         self.cog_distance_to_center = -1
 
@@ -68,6 +69,8 @@ class BinPackingEnv(gym.Env):
         return self._get_obs(), reward, terminated, False, {}
 
     def _get_obs(self):
+        if self.current_item_index >= len(self.items):
+            return {"heightmap": self.heightmap.copy(), "item": None}
         return {"heightmap": self.heightmap.copy(), "item": self.items[self.current_item_index]}
 
     def _generate_items(self):
