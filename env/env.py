@@ -1,3 +1,4 @@
+from cog import calculate_bin_cog
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -7,6 +8,10 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from data import cutter
+
+# Hyperparameters for reward calculation.
+ALPHA = 10.0
+BETA = 1.0
 
 class BinPackingEnv(gym.Env):
     def __init__(self, bin_size=(10, 10, 10)):
@@ -22,10 +27,14 @@ class BinPackingEnv(gym.Env):
             "item": spaces.Box(low=1, high=max(bin_size), shape=(5,), dtype=np.float32)
         })
 
+        self.placed_items = []
+        self.cog_distance_to_center = -1
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self._generate_items()
+        self.placed_items.clear()
         return self._get_obs(), {}
 
     def step(self, action):
@@ -43,8 +52,18 @@ class BinPackingEnv(gym.Env):
         current_max_height = np.max(self.heightmap[x:x+item_l, y:y+item_w])
         self.heightmap[x:x+item_l, y:y+item_w] = current_max_height + item_h
         self.current_item_index += 1
+        self.placed_items.append({'pos': (x, y, current_max_height), 'size': (item_l, item_w, item_h), 'weight': weight})
         # Calculate reward and termination state.
-        reward = 10 * (item_l * item_w * item_h) / np.prod(self.bin_size) # volume utilization reward
+        box_reward = (item_l * item_w * item_h) / np.prod(self.bin_size) # volume utilization reward
+        cog_reward = 0
+        cog = calculate_bin_cog(self.placed_items)
+        if self.cog_distance_to_center == -1:
+            self.cog_distance_to_center = np.linalg.norm(cog - np.array(self.bin_size) / 2)
+        else:
+            new_distance = np.linalg.norm(cog - np.array(self.bin_size) / 2)
+            cog_reward = (self.cog_distance_to_center - new_distance) / (np.linalg.norm(np.array(self.bin_size) / 2)) # normalize by max possible distance
+            self.cog_distance_to_center = new_distance
+        reward = ALPHA * box_reward + BETA * cog_reward
         terminated = self.current_item_index >= len(self.items)
         return self._get_obs(), reward, terminated, False, {}
 
@@ -57,20 +76,3 @@ class BinPackingEnv(gym.Env):
         # Sort by arrival time.
         self.items.sort(key=lambda x: x[3])
         self.current_item_index = 0
-
-# if __name__ == "__main__":
-#     env = BinPackingEnv()
-#     obs = env.reset()
-#     print("initial: " + str(obs))
-#     action = 0
-#     print("action: " + divmod(action, env.bin_size[1]).__str__())
-#     obs, reward, terminated, truncated, info = env.step(action)
-#     print("------------------------------------")
-#     print(obs, reward, terminated, truncated, info)
-#     print("------------------------------------")
-#     action = 50
-#     print("action: " + divmod(action, env.bin_size[1]).__str__())
-#     obs, reward, terminated, truncated, info = env.step(action)
-#     print("------------------------------------")
-#     print(obs, reward, terminated, truncated, info)
-#     print("------------------------------------")
