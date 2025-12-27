@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class MaskedCNNOnlyActorCritic(nn.Module):
+class CNNMaskedActorCritic(nn.Module):
     def __init__(self, bin_size=(10, 10), hidden_size=128):
-        super(MaskedCNNOnlyActorCritic, self).__init__()
+        super(CNNMaskedActorCritic, self).__init__()
         self.bin_size = bin_size
         
-        # 5-layer CNN for 4 channels (Heightmap + L, W, H)
+        # 5-layer CNN for 5 channels (Heightmap + Weightmap + L, W, H)
         self.cnn = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(5, 32, kernel_size=3, padding=1), nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(),
             nn.Conv2d(128, 64, kernel_size=3, padding=1), nn.ReLU(),
