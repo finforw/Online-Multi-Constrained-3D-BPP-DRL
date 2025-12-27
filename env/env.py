@@ -84,3 +84,25 @@ class BinPackingEnv(gym.Env):
         # Sort by arrival time.
         self.items.sort(key=lambda x: x[3])
         self.current_item_index = 0
+    
+    def get_action_mask(self):
+        # mask = np.zeros(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
+        
+        # # If no items left, return all zeros or all ones (won't matter as episode ends)
+        # if self.current_item_index >= len(self.items):
+        #     return mask
+        
+        # item_l, item_w, item_h = map(int, self.items[self.current_item_index][:3])
+        
+        # for action in range(len(mask)):
+        #     x, y = divmod(action, self.bin_size[1])
+            
+        #     # Boundary Check
+        #     if x + item_l <= self.bin_size[0] and y + item_w <= self.bin_size[1]:
+        #         # Optional: Check if the resulting height would exceed bin height
+        #         current_max_h = np.max(self.heightmap[x:x+item_l, y:y+item_w])
+        #         if current_max_h + item_h <= self.bin_size[2]:
+        #             mask[action] = 1.0
+
+        # TODO: un-implemented            
+        return np.zeros(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
