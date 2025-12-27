@@ -24,16 +24,19 @@ class BinPackingEnv(gym.Env):
         # Observation: Current heightmap + Current item dimensions (l, w, h, arrival_time, weight)
         self.observation_space = spaces.Dict({
             "heightmap": spaces.Box(low=0, high=bin_size[2], shape=(bin_size[0], bin_size[1]), dtype=np.int32),
+            "weightmap": spaces.Box(low=0, high=bin_size[2], shape=(bin_size[0], bin_size[1]), dtype=np.float32),
             "item": spaces.Box(low=1, high=max(bin_size), shape=(5,), dtype=np.float32)
         })
 
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
+        self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
         self.placed_items = []
         self.cog_distance_to_center = -1
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
+        self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
         self._generate_items()
         self.placed_items.clear()
         return self._get_obs(), {}
@@ -52,6 +55,8 @@ class BinPackingEnv(gym.Env):
         # Update heightmap and next item index.
         current_max_height = np.max(self.heightmap[x:x+item_l, y:y+item_w])
         self.heightmap[x:x+item_l, y:y+item_w] = current_max_height + item_h
+        current_per_cell_weight = weight / (item_l * item_w)
+        self.weightmap[x:x+item_l, y:y+item_w] += current_per_cell_weight
         self.current_item_index += 1
         self.placed_items.append({'pos': (x, y, current_max_height), 'size': (item_l, item_w, item_h), 'weight': weight})
         # Calculate reward and termination state.
@@ -70,8 +75,8 @@ class BinPackingEnv(gym.Env):
 
     def _get_obs(self):
         if self.current_item_index >= len(self.items):
-            return {"heightmap": self.heightmap.copy(), "item": None}
-        return {"heightmap": self.heightmap.copy(), "item": self.items[self.current_item_index]}
+            return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": None}
+        return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": self.items[self.current_item_index]}
 
     def _generate_items(self):
         box_generator = cutter.Cutter(self.bin_size[0], self.bin_size[1], self.bin_size[2])

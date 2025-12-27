@@ -19,9 +19,11 @@ class TestBinPackingEnv(unittest.TestCase):
     def test_reset(self):
         obs, _ = self.env.reset()
         self.assertEqual(self.env.heightmap.sum(), 0)
+        self.assertEqual(self.env.weightmap.sum(), 0)
         self.assertEqual(len(self.env.placed_items), 0)
         self.assertTrue(len(self.env.items) > 2)
         self.assertTrue("heightmap" in obs)
+        self.assertTrue("weightmap" in obs)
         self.assertTrue("item" in obs)
 
     def test_first_step_placement(self):
@@ -30,6 +32,8 @@ class TestBinPackingEnv(unittest.TestCase):
         
         # Check heightmap: 2x2 area should now be height 2
         np.testing.assert_array_equal(self.env.heightmap[0:2, 0:2], 2)
+        # Check weightmap: 2x2 area should now be weight 10.0 / (2*2) = 2.5
+        np.testing.assert_array_equal(self.env.weightmap[0:2, 0:2], 2.5)
         # Rest of the heightmap should be 0
         self.assertEqual(np.sum(self.env.heightmap), 2 * 4)
 
@@ -41,6 +45,9 @@ class TestBinPackingEnv(unittest.TestCase):
         
         # Check heightmap: 2x2 area should now be height 2 (first item) + 2 (second item) = 4
         np.testing.assert_array_equal(self.env.heightmap[0:2, 0:2], 4)
+        # Check weightmap: 2x2 area should now be weight 2.5 (first) + 2.5 (second) = 5.0
+        np.testing.assert_array_equal(self.env.weightmap[0:2, 0:2], 5)
+        # Ensure only two items are placed
         self.assertEqual(len(self.env.placed_items), 2)
 
     def test_reward_calculation(self):
