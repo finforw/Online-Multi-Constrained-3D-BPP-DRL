@@ -28,13 +28,13 @@ class CNNMaskedActorCritic(nn.Module):
             nn.Linear(hidden_size, 1)
         )
 
-    def forward(self, heightmap, item_dims, mask=None):
+    def forward(self, heightmap, weightmap, item_dims, mask=None):
         batch_size = heightmap.shape[0]
         h, w = self.bin_size
         
         # 1. Broadcoast Item L, W, H to channels
         item_channels = item_dims.view(batch_size, 3, 1, 1).expand(batch_size, 3, h, w)
-        x = torch.cat([heightmap.unsqueeze(1), item_channels], dim=1)
+        x = torch.cat([heightmap.unsqueeze(1), weightmap.unsqueeze(1), item_channels], dim=1)
         
         # 2. Extract Features
         features = self.cnn(x)
