@@ -47,7 +47,7 @@ class BinPackingEnv(gym.Env):
         x, y = divmod(action, self.bin_size[1])
         raw_data = self.items[self.current_item_index]
         item_l, item_w, item_h = map(int, raw_data[:3])
-        arrival_time, weight = raw_data[3:]
+        _, weight = raw_data[3:]
 
         # Update heightmap and next item index.
         current_max_height = np.max(self.heightmap[x:x+item_l, y:y+item_w])
