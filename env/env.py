@@ -101,7 +101,41 @@ class BinPackingEnv(gym.Env):
                 mask[action] = 0.0
                 continue
             # 2) physical stability check
+            if not self._physical_stability_check(x, y, item_l, item_w, current_max_h):
+                mask[action] = 0.0
+                continue
             # 3) arrival time check ? 
 
         # TODO: un-implemented    
         return mask
+    
+    def _physical_stability_check(self, x, y, l, w, support_height):
+        support_area = 0
+        for i in range(x, x + l):
+            for j in range(y, y + w):
+                if self.heightmap[i, j] >= support_height:
+                    support_area += 1
+        item_area = l * w
+        
+        if support_area > 0.95 * item_area:
+            return True
+        
+        corners = [
+            (x, y),
+            (x + l - 1, y),
+            (x, y + w - 1),
+            (x + l - 1, y + w - 1)
+        ]
+
+        corner_supports = 0
+        for corner in corners:
+            if self.heightmap[corner] >= support_height:
+                corner_supports += 1
+        
+        if support_area > 0.8 * item_area and corner_supports >= 3:
+            return True
+
+        if support_area > 0.6 * item_area and corner_supports == 4:
+            return True
+
+        return False 
