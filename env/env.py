@@ -1,4 +1,4 @@
-from cog import calculate_bin_cog
+from .cog import calculate_bin_cog
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -37,6 +37,7 @@ class BinPackingEnv(gym.Env):
         super().reset(seed=seed)
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
+        self.items = None
         self._generate_items()
         self.placed_items.clear()
         return self._get_obs(), {}
