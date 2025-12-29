@@ -13,6 +13,7 @@ class TestBinPackingEnv(unittest.TestCase):
         self.env.items = [
             np.array([2, 2, 2, 0, 10.0]),  # Item 0
             np.array([2, 2, 2, 1, 10.0]),  # Item 1
+            np.array([2, 2, 8, 2, 20.0]),  # Item 2
         ]
         self.env.current_item_index = 0
 
@@ -59,6 +60,28 @@ class TestBinPackingEnv(unittest.TestCase):
         # Place 2nd item at (0,0) again
         _, reward, _, _, _ = self.env.step(0)
         self.assertAlmostEqual(reward, 0.1406, places=4)
+    
+    def test_mask_boundary_check(self):
+        mask = self.env.get_action_mask(self.env.get_obs())
+        expected = np.ones(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
+        expected[90:100] = 0.0  # Last row should be invalid for 2x2 item
+        for i in range(10): # Last column should be invalid
+            expected[i*10 + 9] = 0.0 
+        np.testing.assert_array_equal(mask, expected)
+    
+    def test_mask_height_check(self):
+        self.env.step(0)
+        self.env.step(0)
+        mask = self.env.get_action_mask(self.env.get_obs())
+        expected = np.ones(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
+        expected[90:100] = 0.0  # Last row should be invalid for 2x2 item
+        for i in range(10): # Last column should be invalid
+            expected[i*10 + 9] = 0.0 
+        # Cannot place 8-height item on top of 4-height stack
+        expected[0: 2] = 0.0
+        expected[10: 12] = 0.0
+        np.testing.assert_array_equal(mask, expected)
+
 
 if __name__ == '__main__':
     unittest.main()

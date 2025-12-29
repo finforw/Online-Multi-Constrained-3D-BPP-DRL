@@ -1,4 +1,4 @@
-from .cog import calculate_bin_cog
+from cog import calculate_bin_cog
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -40,7 +40,7 @@ class BinPackingEnv(gym.Env):
         self.items = None
         self._generate_items()
         self.placed_items.clear()
-        return self._get_obs(), {}
+        return self.get_obs(), {}
 
     def step(self, action):
         # This function should be implemented to handle the following:
@@ -72,9 +72,9 @@ class BinPackingEnv(gym.Env):
             self.cog_distance_to_center = new_distance
         reward = ALPHA * box_reward + BETA * cog_reward
         terminated = self.current_item_index >= len(self.items)
-        return self._get_obs(), reward, terminated, False, {}
+        return self.get_obs(), reward, terminated, False, {}
 
-    def _get_obs(self):
+    def get_obs(self):
         if self.current_item_index >= len(self.items):
             return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": np.zeros(5, dtype=np.float32)}
         return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": self.items[self.current_item_index]}
