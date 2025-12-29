@@ -76,7 +76,7 @@ class BinPackingEnv(gym.Env):
 
     def _get_obs(self):
         if self.current_item_index >= len(self.items):
-            return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": None}
+            return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": np.zeros(5, dtype=np.float32)}
         return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": self.items[self.current_item_index]}
 
     def _generate_items(self):
@@ -106,4 +106,4 @@ class BinPackingEnv(gym.Env):
         #             mask[action] = 1.0
 
         # TODO: un-implemented            
-        return np.zeros(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
+        return np.ones(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
