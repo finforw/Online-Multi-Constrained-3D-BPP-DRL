@@ -42,7 +42,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor,
     obs, _ = env.reset(seed=seed)
     total_rewards = 0    
     while True:
-        mask = env.get_action_mask()
+        mask = env.get_action_mask(obs)
         action, log_prob, state_value = choose_action_and_evaluate(model, obs, mask)
         next_obs, reward, done, truncated, _ = env.step(action)
         target_value = get_target_value(model, next_obs, reward, done,
