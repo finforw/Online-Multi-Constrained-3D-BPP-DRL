@@ -104,9 +104,7 @@ class BinPackingEnv(gym.Env):
             if not self._physical_stability_check(x, y, item_l, item_w, current_max_h):
                 mask[action] = 0.0
                 continue
-            # 3) arrival time check ? 
-
-        # TODO: un-implemented    
+            # 3) arrival time check ?    
         return mask
     
     def _physical_stability_check(self, x, y, l, w, support_height):

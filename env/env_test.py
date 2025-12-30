@@ -81,6 +81,34 @@ class TestBinPackingEnv(unittest.TestCase):
         expected[0: 2] = 0.0
         expected[10: 12] = 0.0
         np.testing.assert_array_equal(mask, expected)
+    
+    def test_mask_physical_stability(self):
+        self.env.items = [
+            np.array([2, 2, 2, 0, 10.0]),  # Item 0
+            np.array([2, 2, 2, 1, 10.0]),  # Item 1
+            np.array([2, 2, 2, 2, 10.0]),  # Item 2
+            np.array([2, 2, 2, 3, 10.0]),  # Item 3
+            np.array([3, 3, 3, 4, 15.0]),  # Item 4
+        ]
+        self.env.step(0)
+        self.env.step(3)
+        self.env.step(30)
+        self.env.step(33)
+        mask = self.env.get_action_mask(self.env.get_obs())
+        self.assertEqual(mask[0], 0.0)
+        self.assertEqual(mask[1], 0.0)
+        self.assertEqual(mask[11], 0.0)
+        # Change item 4
+        self.env.items[4] = np.array([2, 3, 2, 5, 10.0])
+        mask = self.env.get_action_mask(self.env.get_obs())
+        self.assertEqual(mask[1], 1.0)
+        self.assertEqual(mask[31], 1.0)
+        self.assertEqual(mask[32], 0.0)
+        # Change item 4 again
+        self.env.items[4] = np.array([5, 5, 5, 4, 15.0])
+        mask = self.env.get_action_mask(self.env.get_obs())
+        self.assertEqual(mask[0], 1.0)
+        self.assertEqual(mask[1], 0.0)
 
 
 if __name__ == '__main__':
