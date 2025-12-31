@@ -1,4 +1,4 @@
-from cog import calculate_bin_cog
+from .cog import calculate_bin_cog
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np

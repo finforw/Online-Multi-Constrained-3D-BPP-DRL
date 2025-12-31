@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from env import BinPackingEnv
+from .env import BinPackingEnv
 
 class TestBinPackingEnv(unittest.TestCase):
     def setUp(self):
