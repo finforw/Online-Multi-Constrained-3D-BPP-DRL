@@ -2,6 +2,7 @@ from .model import CNNMaskedActorCritic, to_tensor
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
+import matplotlib.pyplot as plt
 import numpy as np
 import sys
 import os
@@ -51,34 +52,61 @@ def get_target_value(model, next_obs, reward, done, truncated, discount_factor):
 
 def run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=None):
     obs, _ = env.reset(seed=seed)
-    total_rewards = 0    
+    total_rewards = 0
+    steps_taken = 0
+    
     while True:
         mask = env.get_action_mask(obs)
         if np.all(mask == 0):
-            return total_rewards
+            return total_rewards, steps_taken
         action, log_prob, state_value, e_inf, e_entropy = choose_action_and_evaluate(model, obs, mask)
         next_obs, reward, done, truncated, _ = env.step(action)
+
+        steps_taken += 1
+
         target_value = get_target_value(model, next_obs, reward, done,
                                         truncated, discount_factor)
         ac_training_step(optimizer, criterion, state_value, target_value, log_prob, e_inf, e_entropy)
         total_rewards += reward
         if done or truncated:
-            return total_rewards
+            return total_rewards, steps_taken
         obs = next_obs
 
-def train_actor_critic(model, optimizer, criterion, env, n_episodes=400,
+def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
                        discount_factor=0.95):
-    totals = []
+    step_history = []
+    reward_history = []
+    total_global_steps = 0
+    # totals = []
     model.train()
     for episode in range(n_episodes):
         seed = torch.randint(0, 2**32, size=()).item()
-        total_rewards = run_episode_and_train(model, optimizer, criterion, env,
-                                              discount_factor,
-                                              seed=seed)
-        totals.append(total_rewards)
-        print(f"\rEpisode: {episode + 1}, Rewards: {total_rewards}", end=" ")
+        ep_reward, ep_steps = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed)
+        total_global_steps += ep_steps
 
-    return totals
+        # Store data (Convert steps to Millions for the plot)
+        step_history.append(total_global_steps / 1e6) 
+        reward_history.append(ep_reward)
+        if (episode + 1) % 10 == 0:
+            print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f}", end="")
+
+    return step_history, reward_history
+
+def plot_results(steps, rewards):
+    plt.figure(figsize=(10, 5))
+    
+    # Plot raw rewards in light color
+    plt.plot(steps, rewards, alpha=0.3, color='blue', label='Raw Reward')
+    
+    # Plot moving average (window of 50 episodes)
+    if len(rewards) > 50:
+        smooth_rewards = np.convolve(rewards, np.ones(50)/50, mode='valid')
+        plt.plot(steps[len(steps)-len(smooth_rewards):], smooth_rewards, color='red', label='Smoothed Mean')
+    
+    plt.xlabel("Total Steps (Millions)")
+    plt.ylabel("Reward")
+    plt.legend()
+    plt.show()
 
 if __name__ == "__main__":
     torch.manual_seed(42)
@@ -86,4 +114,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=1.1e-3)
     criterion = nn.MSELoss()
     env = BinPackingEnv()
-    totals = train_actor_critic(ac_model, optimizer, criterion, env)
+    # Capture the history
+    steps, rewards = train_actor_critic(ac_model, optimizer, criterion, env)
+    # Call your plot function
+    plot_results(steps, rewards)
