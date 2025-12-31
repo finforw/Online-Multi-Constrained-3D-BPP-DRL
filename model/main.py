@@ -15,6 +15,7 @@ ALPHA = 1.0
 BETA = 0.5
 OMEGA = 0.01
 PSI = 0.01
+LEARNING_RATE = 3e-4
 
 
 def choose_action_and_evaluate(model, obs, mask):
@@ -111,7 +112,7 @@ def plot_results(steps, rewards):
 if __name__ == "__main__":
     torch.manual_seed(42)
     ac_model = CNNMaskedActorCritic()
-    optimizer = torch.optim.NAdam(ac_model.parameters(), lr=1.1e-3)
+    optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()
     env = BinPackingEnv()
     # Capture the history
