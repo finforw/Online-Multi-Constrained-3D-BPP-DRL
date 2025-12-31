@@ -39,7 +39,9 @@ class Cutter:
         for space in self.spaces:
             self.boxes.append(Box(space[0], space[1], space[2], util.get_time_range()).to_numpy_array())
 
-    def generate_boxes(self):
+    def generate_boxes(self, seed=None):
+        if seed is not None:
+            random.seed(seed)
         self.cut()
         return self.boxes
     

@@ -1,3 +1,4 @@
+import random
 from .cog import calculate_bin_cog
 import gymnasium as gym
 from gymnasium import spaces
@@ -35,10 +36,13 @@ class BinPackingEnv(gym.Env):
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
         self.items = None
-        self._generate_items()
+        self._generate_items(seed=seed)
         self.placed_items.clear()
         return self.get_obs(), {}
 
@@ -79,9 +83,9 @@ class BinPackingEnv(gym.Env):
             return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": np.zeros(5, dtype=np.float32)}
         return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": self.items[self.current_item_index]}
 
-    def _generate_items(self):
+    def _generate_items(self, seed=None):
         box_generator = cutter.Cutter(self.bin_size[0], self.bin_size[1], self.bin_size[2])
-        self.items = box_generator.generate_boxes()
+        self.items = box_generator.generate_boxes(seed=seed)
         # Sort by arrival time.
         self.items.sort(key=lambda x: x[3])
         self.current_item_index = 0
