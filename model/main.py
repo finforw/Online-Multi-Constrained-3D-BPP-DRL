@@ -58,8 +58,6 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
     
     while True:
         mask = env.get_action_mask(obs)
-        if np.all(mask == 0):
-            return total_rewards, steps_taken
         action, log_prob, state_value, e_inf, e_entropy = choose_action_and_evaluate(model, obs, mask)
         next_obs, reward, done, truncated, _ = env.step(action)
 

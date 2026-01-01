@@ -13,6 +13,7 @@ from data import cutter
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
 BETA = 1.0
+PENALTY = -2.0
 
 class BinPackingEnv(gym.Env):
     def __init__(self, bin_size=(10, 10, 10)):
@@ -80,7 +81,7 @@ class BinPackingEnv(gym.Env):
             return self.get_obs(), reward, True, False, {}
         next_mask = self.get_action_mask(self.get_obs())
         if np.all(next_mask == 0): # penalty for no valid actions
-            return self.get_obs(), -2.0, True, False, {}
+            return self.get_obs(), PENALTY, True, False, {}
         return self.get_obs(), reward, False, False, {}
     def get_obs(self):
         if self.current_item_index >= len(self.items):
