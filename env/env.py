@@ -77,12 +77,14 @@ class BinPackingEnv(gym.Env):
             cog_reward = (self.cog_distance_to_center - new_distance) / (np.linalg.norm(np.array(self.bin_size) / 2)) # normalize by max possible distance
             self.cog_distance_to_center = new_distance
         reward = ALPHA * box_reward + BETA * cog_reward
+        next_obs = self.get_obs()
         if self.current_item_index >= len(self.items): # all items have been placed
-            return self.get_obs(), reward, True, False, {}
-        next_mask = self.get_action_mask(self.get_obs())
+            return next_obs, reward, True, False, {}
+        next_mask = self.get_action_mask(next_obs)
         if np.all(next_mask == 0): # penalty for no valid actions
-            return self.get_obs(), PENALTY, True, False, {}
-        return self.get_obs(), reward, False, False, {}
+            return next_obs, PENALTY, True, False, {}
+        return next_obs, reward, False, False, {}
+
     def get_obs(self):
         if self.current_item_index >= len(self.items):
             return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": np.zeros(5, dtype=np.float32)}
