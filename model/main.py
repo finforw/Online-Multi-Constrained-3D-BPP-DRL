@@ -68,7 +68,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
         ac_training_step(optimizer, criterion, state_value, target_value, log_prob, e_inf, e_entropy)
         total_rewards += reward
         if done or truncated:
-            return total_rewards, steps_taken
+            return total_rewards, steps_taken, env.placed_items
         obs = next_obs
 
 def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
@@ -76,26 +76,30 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     step_history = []
     reward_history = []
     boxes_history = []     # Number of boxes placed per episode
+    utilization_history = [] # Space utilization rate per episode
     total_global_steps = 0
     # totals = []
     model.train()
     for episode in range(n_episodes):
         seed = torch.randint(0, 2**32, size=()).item()
-        ep_reward, ep_steps = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed)
+        ep_reward, ep_steps, placed_items = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed)
         total_global_steps += ep_steps
 
         # Store data (Convert steps to Millions for the plot)
         step_history.append(total_global_steps / 1e6) 
         reward_history.append(ep_reward)
         boxes_history.append(ep_steps) # This tracks boxes per episode
+        utilization_rate = calc_space_utilization(placed_items)
+        utilization_history.append(utilization_rate)
+
         if (episode + 1) % 10 == 0:
-            print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f}", end="")
+            print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f} | Utilization: {utilization_rate:.2f}", end="")
 
-    return step_history, reward_history, boxes_history
+    return step_history, reward_history, boxes_history, utilization_history
 
-def plot_results(steps, rewards, boxes):
-    # Create two subplots: one for rewards, one for boxes
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+def plot_results(steps, rewards, boxes, utilizations):
+    # Create three subplots: one for rewards, one for boxes, and one for utilization
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 15))
     plt.subplots_adjust(hspace=0.4)
     
     # --- Plot 1: Reward per Episode ---
@@ -118,7 +122,24 @@ def plot_results(steps, rewards, boxes):
     ax2.set_title("Boxes Placed per Million Steps")
     ax2.legend()
 
+    # --- Plot 3: Utilization Rate per Episode ---
+    ax3.plot(steps, utilizations, alpha=0.3, color='purple', label='Raw Utilization')
+    if len(boxes) > 50:
+        smooth_utilization = np.convolve(utilizations, np.ones(50)/50, mode='valid')
+        ax3.plot(steps[len(steps)-len(smooth_utilization):], smooth_utilization, color='darkblue', label='Moving Avg (50)')
+    ax3.set_xlabel("Total Steps (Millions)")
+    ax3.set_ylabel("Utilization rate")
+    ax3.set_title("Space Utilization Rate per Million Steps")
+    ax3.legend()
+
     plt.show()
+
+def calc_space_utilization(placed_items, bin_size=1000):
+    total_volume = 0
+    for item in placed_items:
+        l, w, h = item['size']
+        total_volume += l * w * h
+    return total_volume / bin_size
 
 if __name__ == "__main__":
     torch.manual_seed(36)
@@ -127,6 +148,6 @@ if __name__ == "__main__":
     criterion = nn.MSELoss()
     env = BinPackingEnv()
     # Capture the history
-    steps, rewards, boxes = train_actor_critic(ac_model, optimizer, criterion, env)
+    steps, rewards, boxes, utilizations = train_actor_critic(ac_model, optimizer, criterion, env)
     # Call your plot function
-    plot_results(steps, rewards, boxes)
+    plot_results(steps, rewards, boxes, utilizations)
