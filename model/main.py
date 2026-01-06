@@ -75,6 +75,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
                        discount_factor=0.95):
     step_history = []
     reward_history = []
+    boxes_history = []     # Number of boxes placed per episode
     total_global_steps = 0
     # totals = []
     model.train()
@@ -86,34 +87,46 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
         # Store data (Convert steps to Millions for the plot)
         step_history.append(total_global_steps / 1e6) 
         reward_history.append(ep_reward)
+        boxes_history.append(ep_steps) # This tracks boxes per episode
         if (episode + 1) % 10 == 0:
             print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f}", end="")
 
-    return step_history, reward_history
+    return step_history, reward_history, boxes_history
 
-def plot_results(steps, rewards):
-    plt.figure(figsize=(10, 5))
+def plot_results(steps, rewards, boxes):
+    # Create two subplots: one for rewards, one for boxes
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+    plt.subplots_adjust(hspace=0.4)
     
-    # Plot raw rewards in light color
-    plt.plot(steps, rewards, alpha=0.3, color='blue', label='Raw Reward')
-    
-    # Plot moving average (window of 50 episodes)
+    # --- Plot 1: Reward per Episode ---
+    ax1.plot(steps, rewards, alpha=0.3, color='blue', label='Raw Reward')
     if len(rewards) > 50:
         smooth_rewards = np.convolve(rewards, np.ones(50)/50, mode='valid')
-        plt.plot(steps[len(steps)-len(smooth_rewards):], smooth_rewards, color='red', label='Smoothed Mean')
-    
-    plt.xlabel("Total Steps (Millions)")
-    plt.ylabel("Reward")
-    plt.legend()
+        ax1.plot(steps[len(steps)-len(smooth_rewards):], smooth_rewards, color='red', label='Moving Avg (50)')
+    ax1.set_xlabel("Total Steps (Millions)")
+    ax1.set_ylabel("Reward")
+    ax1.set_title("Reward per Million Steps")
+    ax1.legend()
+
+    # --- Plot 2: Boxes per Episode ---
+    ax2.plot(steps, boxes, alpha=0.3, color='green', label='Raw Boxes')
+    if len(boxes) > 50:
+        smooth_boxes = np.convolve(boxes, np.ones(50)/50, mode='valid')
+        ax2.plot(steps[len(steps)-len(smooth_boxes):], smooth_boxes, color='darkgreen', label='Moving Avg (50)')
+    ax2.set_xlabel("Total Steps (Millions)")
+    ax2.set_ylabel("Number of Boxes Placed")
+    ax2.set_title("Boxes Placed per Million Steps")
+    ax2.legend()
+
     plt.show()
 
 if __name__ == "__main__":
-    torch.manual_seed(42)
+    torch.manual_seed(36)
     ac_model = CNNMaskedActorCritic()
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()
     env = BinPackingEnv()
     # Capture the history
-    steps, rewards = train_actor_critic(ac_model, optimizer, criterion, env)
+    steps, rewards, boxes = train_actor_critic(ac_model, optimizer, criterion, env)
     # Call your plot function
-    plot_results(steps, rewards)
+    plot_results(steps, rewards, boxes)
