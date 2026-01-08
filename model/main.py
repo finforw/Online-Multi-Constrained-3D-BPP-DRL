@@ -142,7 +142,7 @@ def calc_space_utilization(placed_items, bin_size=1000):
     return total_volume / bin_size
 
 if __name__ == "__main__":
-    torch.manual_seed(36)
+    torch.manual_seed(42)
     ac_model = CNNMaskedActorCritic()
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
     criterion = nn.MSELoss()

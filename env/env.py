@@ -12,7 +12,7 @@ from data import cutter
 
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
-BETA = 1.0
+BETA = 0.0
 PENALTY = -2.0
 
 class BinPackingEnv(gym.Env):
@@ -94,7 +94,7 @@ class BinPackingEnv(gym.Env):
         box_generator = cutter.Cutter(self.bin_size[0], self.bin_size[1], self.bin_size[2])
         self.items = box_generator.generate_boxes(seed=seed)
         # Sort by arrival time.
-        self.items.sort(key=lambda x: x[3])
+        # self.items.sort(key=lambda x: x[3])
         self.current_item_index = 0
     
     def get_action_mask(self, obs):
