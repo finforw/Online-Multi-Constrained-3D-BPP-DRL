@@ -20,6 +20,7 @@ OMEGA = 0.01
 PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
+EPISODES = 15000
 
 
 def choose_action_and_evaluate(model, obs, mask):
@@ -260,7 +261,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     ac_model = CNNMaskedActorCritic(hidden_size=256, device=device)
-    n_episodes = 1000
+    n_episodes = EPISODES
     lr_ratio = MIN_LR / LEARNING_RATE
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
     # Linear Decay
