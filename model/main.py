@@ -16,11 +16,11 @@ from env.env import BinPackingEnv
 
 ALPHA = 1.0
 BETA = 0.5
-OMEGA = 0.01
+OMEGA = 0.03
 PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
-EPISODES = 250000
+EPISODES = 300000
 
 
 def choose_action_and_evaluate(model, obs, mask):
@@ -217,10 +217,9 @@ if __name__ == "__main__":
     n_episodes = EPISODES
     lr_ratio = MIN_LR / LEARNING_RATE
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer, 
-        T_max=n_episodes, 
-        eta_min=1e-6
+        lr_lambda=lambda ep: 1.0 - (ep / n_episodes) * (1.0 - lr_ratio)
     )
     criterion = nn.MSELoss()
     env = BinPackingEnv()
