@@ -125,7 +125,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
                 _, final_value = model(next_obs)
             
             # 2. Calculate the returns for the whole episode
-            returns = calculate_returns(rewards, final_value.item(), done, discount_factor)
+            returns = calculate_returns(rewards, final_value.item(), done, discount_factor, device=model.device)
             
             # 3. Update the model using the whole rollout (A2C)
             a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=psi)
@@ -257,7 +257,9 @@ def calc_space_utilization(placed_items, bin_size=1000):
 
 if __name__ == "__main__":
     torch.manual_seed(42)
-    ac_model = CNNMaskedActorCritic()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    ac_model = CNNMaskedActorCritic(hidden_size=256, device=device)
     n_episodes = 1000
     lr_ratio = MIN_LR / LEARNING_RATE
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
