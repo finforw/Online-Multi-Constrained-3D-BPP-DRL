@@ -20,7 +20,7 @@ OMEGA = 0.01
 PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
-EPISODES = 15000
+EPISODES = 250000
 
 
 def choose_action_and_evaluate(model, obs, mask):
@@ -202,53 +202,6 @@ def plot_results(steps, rewards, boxes, utilizations, entropies, filename="train
     print(f"Plot saved to {filename}")
     plt.close(fig) # Free up memory
 
-# def plot_results(steps, rewards, boxes, utilizations, entropies):
-#     # Create three subplots: one for rewards, one for boxes, and one for utilization
-#     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 20))
-#     plt.subplots_adjust(hspace=0.4)
-    
-#     # --- Plot 1: Reward per Episode ---
-#     ax1.plot(steps, rewards, alpha=0.3, color='blue', label='Raw Reward')
-#     if len(rewards) > 50:
-#         smooth_rewards = np.convolve(rewards, np.ones(50)/50, mode='valid')
-#         ax1.plot(steps[len(steps)-len(smooth_rewards):], smooth_rewards, color='red', label='Moving Avg (50)')
-#     ax1.set_xlabel("Total Steps (Millions)")
-#     ax1.set_ylabel("Reward")
-#     ax1.set_title("Reward per Million Steps")
-#     ax1.legend()
-
-#     # --- Plot 2: Boxes per Episode ---
-#     ax2.plot(steps, boxes, alpha=0.3, color='green', label='Raw Boxes')
-#     if len(boxes) > 50:
-#         smooth_boxes = np.convolve(boxes, np.ones(50)/50, mode='valid')
-#         ax2.plot(steps[len(steps)-len(smooth_boxes):], smooth_boxes, color='darkgreen', label='Moving Avg (50)')
-#     ax2.set_xlabel("Total Steps (Millions)")
-#     ax2.set_ylabel("Number of Boxes Placed")
-#     ax2.set_title("Boxes Placed per Million Steps")
-#     ax2.legend()
-
-#     # --- Plot 3: Utilization Rate per Episode ---
-#     ax3.plot(steps, utilizations, alpha=0.3, color='purple', label='Raw Utilization')
-#     if len(boxes) > 50:
-#         smooth_utilization = np.convolve(utilizations, np.ones(50)/50, mode='valid')
-#         ax3.plot(steps[len(steps)-len(smooth_utilization):], smooth_utilization, color='darkblue', label='Moving Avg (50)')
-#     ax3.set_xlabel("Total Steps (Millions)")
-#     ax3.set_ylabel("Utilization rate")
-#     ax3.set_title("Space Utilization Rate per Million Steps")
-#     ax3.legend()
-
-#     # --- Plot 4: Policy Entropy (Curiosity) ---
-#     ax4.plot(steps, entropies, alpha=0.3, color='orange', label='Raw Entropy')
-#     if len(entropies) > 50:
-#         smooth_entropy = np.convolve(entropies, np.ones(50)/50, mode='valid')
-#         ax4.plot(steps[-len(smooth_entropy):], smooth_entropy, color='darkorange', label='Moving Avg (50)')
-#     ax4.set_xlabel("Total Steps (Millions)")
-#     ax4.set_ylabel("Entropy")
-#     ax4.set_title("Policy Entropy (Exploration Level)")
-#     ax4.legend()
-
-#     plt.show()
-
 def calc_space_utilization(placed_items, bin_size=1000):
     total_volume = 0
     for item in placed_items:
@@ -264,11 +217,10 @@ if __name__ == "__main__":
     n_episodes = EPISODES
     lr_ratio = MIN_LR / LEARNING_RATE
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
-    # Linear Decay
-    # The lambda goes from 1.0 down to lr_ratio
-    scheduler = torch.optim.lr_scheduler.LambdaLR(
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, 
-        lr_lambda=lambda ep: 1.0 - (ep / n_episodes) * (1.0 - lr_ratio)
+        T_max=n_episodes, 
+        eta_min=1e-6
     )
     criterion = nn.MSELoss()
     env = BinPackingEnv()
