@@ -62,7 +62,7 @@ def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
     for r in reversed(rewards):
         R = r + gamma * R
         returns.insert(0, R)
-    return torch.tensor(returns, device=device)
+    return torch.tensor(returns, dtype=torch.float32, device=device)
 
 def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=PSI):
     """Performs a batch update on the collected rollout."""
