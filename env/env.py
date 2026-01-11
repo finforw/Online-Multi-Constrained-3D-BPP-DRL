@@ -13,7 +13,7 @@ from data import cutter
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
 BETA = 0.0
-PENALTY = -2.0
+PENALTY = 0.0
 
 class BinPackingEnv(gym.Env):
     def __init__(self, bin_size=(10, 10, 10)):
