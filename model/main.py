@@ -77,7 +77,12 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
     # 1. Advantage = Actual Return - Predicted Value
     # We detach values so the actor loss doesn't affect the critic weights
     advantages = returns - values.detach()
-    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    if advantages.numel() > 1:
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+    else:
+        # If only 1 step, standard deviation is undefined/zero. 
+        # Just center it (result will be 0.0, which is correct: no relative advantage)
+        advantages = advantages - advantages.mean()
 
     # 2. A2C Loss Components
     actor_loss = -(log_probs * advantages).mean()
