@@ -141,10 +141,10 @@ class BinPackingEnv(gym.Env):
             if self.heightmap[corner] >= support_height:
                 corner_supports += 1
         
-        if support_area > 0.8 * item_area and corner_supports >= 3:
+        if support_area > 0.85 * item_area and corner_supports >= 3:
             return True
 
-        if support_area > 0.6 * item_area and corner_supports == 4:
+        if support_area > 0.50 * item_area and corner_supports == 4:
             return True
 
         return False 

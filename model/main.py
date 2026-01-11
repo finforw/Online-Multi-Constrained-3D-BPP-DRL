@@ -16,11 +16,11 @@ from env.env import BinPackingEnv
 
 ALPHA = 1.0
 BETA = 0.5
-OMEGA = 0.03
+OMEGA = 0.01
 PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
-EPISODES = 300000
+EPISODES = 250000
 
 
 def choose_action_and_evaluate(model, obs, mask):
