@@ -81,7 +81,7 @@ class BinPackingEnv(gym.Env):
         if self.current_item_index >= len(self.items): # all items have been placed
             return next_obs, reward, True, False, {}
         next_mask = self.get_action_mask(next_obs)
-        if np.all(next_mask == 0): # penalty for no valid actions
+        if np.all(next_mask == 1e-3): # penalty for no valid actions
             return next_obs, PENALTY, True, False, {}
         return next_obs, reward, False, False, {}
 
@@ -98,24 +98,29 @@ class BinPackingEnv(gym.Env):
         self.current_item_index = 0
     
     def get_action_mask(self, obs):
-        # All actions are valid by default.
-        mask = np.ones(self.bin_size[0] * self.bin_size[1], dtype=np.float32)
+        # Initialize with the "Magic Number" (0.001) instead of 0.0
+        # This prevents the Dead ReLU problem in the Mask Head.
+        mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
+        
         for action in range(len(mask)):
             x, y = divmod(action, self.bin_size[1])
             item_l, item_w, item_h = map(int, obs['item'][:3])
-            # 1) boundary check (plus height check)
+            
+            # 1) Boundary Check
             if x + item_l > self.bin_size[0] or y + item_w > self.bin_size[1]:
-                mask[action] = 0.0
-                continue
+                continue # Stays 1e-3
+
             current_max_h = np.max(self.heightmap[x:x+item_l, y:y+item_w])
             if current_max_h + item_h > self.bin_size[2]:
-                mask[action] = 0.0
-                continue
-            # 2) physical stability check
+                continue # Stays 1e-3
+            
+            # 2) Physical Stability Check (Using your 50% rule)
             if not self._physical_stability_check(x, y, item_l, item_w, current_max_h):
-                mask[action] = 0.0
-                continue
-            # 3) arrival time check ?    
+                continue # Stays 1e-3
+            
+            # If we reach here, it's Valid!
+            mask[action] = 1.0
+
         return mask
     
     def _physical_stability_check(self, x, y, l, w, support_height):

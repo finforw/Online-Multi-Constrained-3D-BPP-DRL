@@ -21,22 +21,36 @@ PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
 EPISODES = 250000
+# mask pred loss
+AUX_LOSS_WEIGHT = 0.5
 
 
 def choose_action_and_evaluate(model, obs, mask):
-    logits, state_value = model(obs) # Unmasked logits first.
+    # Unpack 3 values
+    logits, state_value, mask_pred = model(obs) 
+    
     probs = torch.softmax(logits, dim=-1)
     mask_tensor = to_tensor(mask, model.device)
     if mask_tensor.dim() == 1:
         mask_tensor = mask_tensor.unsqueeze(0)
-    infeasible_mask = (mask_tensor == 0).float()
+        
+    # Create Binary Mask for RL logic (filter out the 1e-3s)
+    binary_mask = (mask_tensor > 0.5).float()
+    
+    # Calculate infeasible prob using binary mask
+    infeasible_mask = (binary_mask == 0).float()
     e_inf = torch.sum(probs * infeasible_mask, dim=-1)
-    masked_logits = logits.masked_fill(mask_tensor == 0, float('-inf'))
+    
+    # Mask Logits using binary mask
+    masked_logits = logits.masked_fill(binary_mask == 0, float('-inf'))
+    
     dist = Categorical(logits=masked_logits)
     action_tensor = dist.sample() 
     action = action_tensor.item()
     log_prob = dist.log_prob(action_tensor)
-    return int(action), log_prob, state_value, e_inf, dist.entropy()
+    
+    # Return mask_pred for training
+    return int(action), log_prob, state_value, e_inf, dist.entropy(), mask_pred
 
 def ac_training_step(optimizer, criterion, state_value, target_value, log_prob, e_inf, e_entropy):
     td_error = target_value - state_value
@@ -65,57 +79,68 @@ def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
         returns.insert(0, R)
     return torch.tensor(returns, dtype=torch.float32, device=device)
 
-def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=PSI):
-    """Performs a batch update on the collected rollout."""
-    # Convert lists to tensors
-    values = torch.cat(values).view(-1)       # Force 1D: [Batch]
+def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
+                      mask_preds, true_masks, psi=PSI):
+    # Flatten RL tensors
+    values = torch.cat(values).view(-1)
     log_probs = torch.stack(log_probs).view(-1)
     returns = returns.to(values.device).view(-1)
     entropies = torch.stack(entropies).view(-1)
     e_infs = torch.stack(e_infs).view(-1)
 
-    # 1. Advantage = Actual Return - Predicted Value
-    # We detach values so the actor loss doesn't affect the critic weights
+    # --- 1. MASK LOSS (MSE) ---
+    mask_preds = torch.cat(mask_preds).view(-1, 100)
+    true_masks = torch.stack(true_masks).view(-1, 100)
+    
+    # Use MSE Loss as per Author's code
+    mask_loss_func = nn.MSELoss()
+    graph_loss = mask_loss_func(mask_preds, true_masks)
+
+    # --- 2. RL Update ---
     advantages = returns - values.detach()
+    # Safe Normalization
     if advantages.numel() > 1:
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     else:
-        # If only 1 step, standard deviation is undefined/zero. 
-        # Just center it (result will be 0.0, which is correct: no relative advantage)
         advantages = advantages - advantages.mean()
-
-    # 2. A2C Loss Components
+        
     actor_loss = -(log_probs * advantages).mean()
     critic_loss = F.mse_loss(values, returns)
     
-    # 3. Combined Loss (using your existing weights)
+    # --- 3. TOTAL LOSS ---
     loss = (ALPHA * actor_loss + 
             BETA * critic_loss + 
             OMEGA * e_infs.mean() - 
-            psi * entropies.mean())
+            psi * entropies.mean() +
+            AUX_LOSS_WEIGHT * graph_loss)
 
     optimizer.zero_grad()
     loss.backward()
-    
-    # Essential for A2C stability
     torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]['params'], 0.5)
-    
     optimizer.step()
 
 def run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=None, psi=PSI):
     obs, _ = env.reset(seed=seed)
+    
+    # Buffers
+    values, log_probs, rewards, entropies, e_infs = [], [], [], [], []
+    mask_preds, true_masks = [], [] # <--- New Buffers
+    
     total_rewards = 0
     steps_taken = 0
-
-    # Rollout Buffers
-    values, log_probs, rewards, entropies, e_infs = [], [], [], [], []
     
     while True:
-        mask = env.get_action_mask(obs)
-        action, log_prob, state_value, e_inf, e_entropy = choose_action_and_evaluate(model, obs, mask)
+        mask = env.get_action_mask(obs) # Soft Mask (1.0 or 0.001)
+        
+        # Unpack mask_pred
+        action, log_prob, state_value, e_inf, e_entropy, current_mask_pred = choose_action_and_evaluate(model, obs, mask)
+        
+        # Store prediction and ground truth
+        mask_preds.append(current_mask_pred)
+        true_masks.append(torch.tensor(mask, dtype=torch.float32, device=model.device))
+
         next_obs, reward, done, truncated, _ = env.step(action)
 
-        # Store transition data
         values.append(state_value)
         log_probs.append(log_prob)
         rewards.append(reward)
@@ -127,19 +152,16 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
         obs = next_obs
 
         if done or truncated:
-            # 1. Get the value of the final state (0 if done, V(s') if truncated)
             with torch.no_grad():
-                _, final_value = model(next_obs)
+                _, final_value, _ = model(next_obs) # Ignore mask_pred here
             
-            # 2. Calculate the returns for the whole episode
             returns = calculate_returns(rewards, final_value.item(), done, discount_factor, device=model.device)
             
-            # 3. Update the model using the whole rollout (A2C)
-            a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=psi)
-
-            # Calculate the average entropy for this entire episode
-            avg_ep_entropy = torch.stack(entropies).mean().item()
+            # Pass new buffers to training step
+            a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
+                              mask_preds, true_masks, psi=psi)
             
+            avg_ep_entropy = torch.stack(entropies).mean().item()
             return total_rewards, steps_taken, env.placed_items, avg_ep_entropy
 
 def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
