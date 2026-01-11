@@ -16,15 +16,15 @@ class CNNMaskedActorCritic(nn.Module):
         # CHANGED: Input channels reduced from 6 to 4
         # 1 Channel (Heightmap) + 3 Channels (Item Length, Width, Height)
         self.cnn = nn.Sequential(
-            nn.Conv2d(4, 32, kernel_size=3, padding=1), nn.ReLU(), # Changed 6 -> 4
-            nn.Conv2d(32, 64, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(128, 64, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(4, 64, kernel_size=3, padding=1), nn.ReLU(), # Changed 6 -> 4
+            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
             nn.Flatten()
         )
         
-        cnn_out_dim = 32 * bin_size[0] * bin_size[1]
+        cnn_out_dim = 64 * bin_size[0] * bin_size[1]
         
         self.actor_hidden = nn.Linear(cnn_out_dim, hidden_size)
         self.actor_logits = nn.Linear(hidden_size, bin_size[0] * bin_size[1])
