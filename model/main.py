@@ -200,7 +200,7 @@ def plot_results(steps, rewards, boxes, utilizations, entropies, filename="train
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 24))
     
     # 2. Define a reusable function for moving averages to keep code clean
-    def plot_with_ma(ax, data, label, color, ma_color, window=100):
+    def plot_with_ma(ax, data, label, color, ma_color, window=50):
         ax.plot(steps, data, alpha=0.2, color=color, label=f'Raw {label}')
         if len(data) > window:
             smooth = np.convolve(data, np.ones(window)/window, mode='valid')
