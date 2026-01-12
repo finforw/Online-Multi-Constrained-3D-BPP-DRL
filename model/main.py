@@ -52,16 +52,6 @@ def choose_action_and_evaluate(model, obs, mask):
     # Return mask_pred for training
     return int(action), log_prob, state_value, e_inf, dist.entropy(), mask_pred
 
-def ac_training_step(optimizer, criterion, state_value, target_value, log_prob, e_inf, e_entropy):
-    td_error = target_value - state_value
-    actor_loss = -log_prob * td_error.detach()
-    critic_loss = criterion(state_value, target_value)
-    # TODO: refactor the loss function to include other factors.
-    loss = ALPHA * actor_loss + BETA * critic_loss + OMEGA * e_inf.mean() - PSI * e_entropy.mean()
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
 def get_target_value(model, next_obs, reward, done, truncated, discount_factor):
     with torch.inference_mode():
         _, next_state_value = model(next_obs)
@@ -176,8 +166,15 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     model.train()
     initial_psi = 0.1  # Start very high
     final_psi = 0.01   # End low to allow convergence
+    decay_horizon = int(n_episodes * 0.83)
+
     for episode in range(n_episodes):
-        psi = initial_psi - (episode / n_episodes) * (initial_psi - final_psi)
+        if episode < decay_horizon:
+            progress = episode / decay_horizon
+            psi = initial_psi - progress * (initial_psi - final_psi)
+        else:
+            # Stay at the floor for the rest of training
+            psi = final_psi
         seed = torch.randint(0, 2**32, size=()).item()
         ep_reward, ep_steps, placed_items, ep_entropy = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed, psi=psi)
         total_global_steps += ep_steps
