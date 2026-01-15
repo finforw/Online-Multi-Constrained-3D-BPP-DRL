@@ -20,7 +20,7 @@ OMEGA = 0.01
 PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
-EPISODES = 300000
+EPISODES = 1000
 # mask pred loss
 AUX_LOSS_WEIGHT = 0.5
 
@@ -192,6 +192,8 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
 
         if (episode + 1) % 10 == 0:
             print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f} | Utilization: {utilization_rate:.2f} | Entropy: {ep_entropy:.3f}", end="")
+    
+    torch.save(model.state_dict(), os.path.join("trained_models", "best_model.pt"))
 
     return step_history, reward_history, boxes_history, utilization_history, entropy_history
 

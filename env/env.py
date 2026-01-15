@@ -35,7 +35,7 @@ class BinPackingEnv(gym.Env):
         self.placed_items = []
         self.cog_distance_to_center = -1
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None, test_sequence=None):
         super().reset(seed=seed)
         if seed is not None:
             random.seed(seed)
@@ -43,7 +43,7 @@ class BinPackingEnv(gym.Env):
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
         self.items = None
-        self._generate_items(seed=seed)
+        self._generate_items(seed=seed, test_sequence=test_sequence)
         self.placed_items.clear()
         return self.get_obs(), {}
 
@@ -90,9 +90,13 @@ class BinPackingEnv(gym.Env):
             return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": np.zeros(5, dtype=np.float32)}
         return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": self.items[self.current_item_index]}
 
-    def _generate_items(self, seed=None):
-        box_generator = cutter.Cutter(self.bin_size[0], self.bin_size[1], self.bin_size[2])
-        self.items = box_generator.generate_boxes(seed=seed)
+    def _generate_items(self, seed=None, test_sequence=None):
+        if test_sequence is not None:
+            self.items = test_sequence
+        else:
+            box_generator = cutter.Cutter(self.bin_size[0], self.bin_size[1], self.bin_size[2])
+            self.items = box_generator.generate_boxes(seed=seed)
+
         # Sort by arrival time.
         # self.items.sort(key=lambda x: x[3])
         self.current_item_index = 0
