@@ -1,4 +1,5 @@
 from .model import CNNMaskedActorCritic, to_tensor
+from trained_models.test_model import test_model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,7 +21,7 @@ OMEGA = 0.01
 PSI = 0.12
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
-EPISODES = 1000
+EPISODES = 300000
 # mask pred loss
 AUX_LOSS_WEIGHT = 0.5
 
@@ -167,6 +168,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     initial_psi = 0.1  # Start very high
     final_psi = 0.01   # End low to allow convergence
     decay_horizon = int(n_episodes * 0.83)
+    best_val_score = -float('inf')
 
     for episode in range(n_episodes):
         if episode < decay_horizon:
@@ -192,8 +194,23 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
 
         if (episode + 1) % 10 == 0:
             print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f} | Utilization: {utilization_rate:.2f} | Entropy: {ep_entropy:.3f}", end="")
-    
-    torch.save(model.state_dict(), os.path.join("trained_models", "best_model.pt"))
+        
+        # Checkpoint model every 1000 episodes
+        if (episode + 1) % 1000 == 0:
+            # 1. Switch to Eval mode (turns off dropout/randomness)
+            model.eval()
+            
+            # 2. Run on fixed test set
+            _, utilization_score = test_model(model, 'test_data/cut_1.pt', device=model.device)
+            
+            # 3. Save if better
+            if utilization_score > best_val_score:
+                best_val_score = utilization_score
+                print("Saving best model with utilization: {:.3%}".format(best_val_score))
+                torch.save(model.state_dict(), os.path.join("trained_models", "best_val_model.pt"))
+            
+            # 4. Switch back to Train mode
+            model.train()
 
     return step_history, reward_history, boxes_history, utilization_history, entropy_history
 
@@ -202,7 +219,7 @@ def plot_results(steps, rewards, boxes, utilizations, entropies, filename="train
     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 24))
     
     # 2. Define a reusable function for moving averages to keep code clean
-    def plot_with_ma(ax, data, label, color, ma_color, window=5000):
+    def plot_with_ma(ax, data, label, color, ma_color, window=4500):
         ax.plot(steps, data, alpha=0.2, color=color, label=f'Raw {label}')
         if len(data) > window:
             smooth = np.convolve(data, np.ones(window)/window, mode='valid')
