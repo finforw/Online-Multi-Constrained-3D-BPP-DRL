@@ -46,4 +46,4 @@ def inspect_pt_file(file_path):
 
 # Run the inspection
 if __name__ == "__main__":
-    inspect_pt_file('cut_2.pt')
+    inspect_pt_file('test_data/fizz_fuzz.pt')
