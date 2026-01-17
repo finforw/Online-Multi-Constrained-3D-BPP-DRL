@@ -260,7 +260,7 @@ if __name__ == "__main__":
     ac_model = CNNMaskedActorCritic(hidden_size=256, device=device)
     n_episodes = EPISODES
     lr_ratio = MIN_LR / LEARNING_RATE
-    optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.RMSprop(ac_model.parameters(), lr=7e-4, alpha=0.99, eps=1e-5)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer, 
         lr_lambda=lambda ep: 1.0 - (ep / n_episodes) * (1.0 - lr_ratio)
