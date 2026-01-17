@@ -8,6 +8,14 @@ def to_tensor(data, device):
         return data.float().to(device)
     return torch.tensor(data, dtype=torch.float32, device=device)
 
+# Helper for Orthogonal Initialization (Crucial for RL)
+def init_layer(m, gain=1.0):
+    if isinstance(m, (nn.Conv2d, nn.Linear)):
+        nn.init.orthogonal_(m.weight, gain=gain)
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+    return m
+
 class CNNMaskedActorCritic(nn.Module):
     def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu'):
         super(CNNMaskedActorCritic, self).__init__()
@@ -16,41 +24,43 @@ class CNNMaskedActorCritic(nn.Module):
         
         # 1. SHARED BACKBONE (Widen to 64 filters to match Author)
         self.backbone = nn.Sequential(
-            nn.Conv2d(4, 64, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.ReLU(),
+            init_layer(nn.Conv2d(4, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
         )
         
         flat_size = 64 * bin_size[0] * bin_size[1]
         
         # 2. ACTOR HEAD
-        self.actor_head = nn.Sequential(
+        self.actor_features = nn.Sequential(
+            init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), # Bottleneck
             nn.Flatten(),
-            nn.Linear(flat_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, bin_size[0] * bin_size[1])
+            init_layer(nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')), 
+            nn.ReLU()
         )
+        self.actor_linear = init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1]), gain=0.01) # Small gain for action logits
         
         # 3. CRITIC HEAD
-        self.critic_head = nn.Sequential(
+        self.critic_features = nn.Sequential(
+            init_layer(nn.Conv2d(64, 4, kernel_size=1)), nn.ReLU(), # Bottleneck to 4
             nn.Flatten(),
-            nn.Linear(flat_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, 1)
+            init_layer(nn.Linear(4 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')),
+            nn.ReLU()
         )
+        self.critic_linear = init_layer(nn.Linear(hidden_size, 1), gain=1.0)
 
         # 4. MASK HEAD (Strict Reproduction of Author's Architecture)
         # Conv(64->8) -> ReLU -> Flatten -> Linear -> ReLU -> Linear -> ReLU
         #
         self.mask_head = nn.Sequential(
-            nn.Conv2d(64, 8, kernel_size=1), nn.ReLU(), # Bottleneck
+            init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), 
             nn.Flatten(),
-            nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size),
+            init_layer(nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')),
             nn.ReLU(),
-            nn.Linear(hidden_size, bin_size[0] * bin_size[1]),
-            nn.ReLU() # Output is strictly positive [0, inf)
+            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1]), gain=1.0),
+            nn.ReLU() 
         )
 
         self.to(self.device)
@@ -75,7 +85,8 @@ class CNNMaskedActorCritic(nn.Module):
         features = self.backbone(x)
         
         # --- Heads ---
-        logits = self.actor_head(features)
+        actor_emb = self.actor_features(features)
+        logits = self.actor_linear(actor_emb)
         
         # Apply mask to Actor (Logic: If passed mask < 0.5, it's invalid)
         if mask is not None:
@@ -84,7 +95,9 @@ class CNNMaskedActorCritic(nn.Module):
             # Threshold at 0.5 because our Soft Mask uses 1e-3 for invalid
             logits = logits.masked_fill(mask_tensor < 0.5, float('-inf'))
         
-        value = self.critic_head(features)
+        critic_emb = self.critic_features(features)
+        value = self.critic_linear(critic_emb)
+        
         mask_pred = self.mask_head(features) 
         
         return logits, value, mask_pred
