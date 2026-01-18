@@ -167,7 +167,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     model.train()
     initial_psi = 0.1  # Start very high
     final_psi = 0.01   # End low to allow convergence
-    decay_horizon = 250000
+    decay_horizon = 249000
     best_val_score = -float('inf')
 
     for episode in range(n_episodes):
