@@ -167,7 +167,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     model.train()
     initial_psi = 0.1  # Start very high
     final_psi = 0.01   # End low to allow convergence
-    decay_horizon = int(n_episodes * 0.714)
+    decay_horizon = 250000
     best_val_score = -float('inf')
 
     for episode in range(n_episodes):
@@ -196,7 +196,24 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
             print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f} | Utilization: {utilization_rate:.2f} | Entropy: {ep_entropy:.3f}", end="")
         
         # Checkpoint model every 1000 episodes
-        if (episode + 1) % 1000 == 0:
+        if episode < 300000 and (episode + 1) % 1000 == 0:
+            # 1. Switch to Eval mode (turns off dropout/randomness)
+            model.eval()
+            
+            # 2. Run on fixed test set
+            _, utilization_score = test_model(model, 'test_data/cut_1.pt', device=model.device)
+            
+            # 3. Save if better
+            if utilization_score > best_val_score:
+                best_val_score = utilization_score
+                print("Saving best model with utilization: {:.3%}".format(best_val_score))
+                torch.save(model.state_dict(), os.path.join("trained_models", "best_val_model.pt"))
+            
+            # 4. Switch back to Train mode
+            model.train()
+            continue
+        
+        if episode >= 300000 and (episode + 1) % 100 == 0:
             # 1. Switch to Eval mode (turns off dropout/randomness)
             model.eval()
             
@@ -259,11 +276,24 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     ac_model = CNNMaskedActorCritic(hidden_size=256, device=device)
     n_episodes = EPISODES
+
+    # Define the cutoff point for lr decay.
+    DECAY_CUTOFF = 300000
+
     lr_ratio = MIN_LR / LEARNING_RATE
     optimizer = torch.optim.NAdam(ac_model.parameters(), lr=LEARNING_RATE)
+
+    def lr_lambda(ep):
+        if ep < DECAY_CUTOFF:
+            # Linear decay phase: Decays from 1.0 to lr_ratio
+            return 1.0 - (ep / DECAY_CUTOFF) * (1.0 - lr_ratio)
+        else:
+            # Constant phase: Stays at lr_ratio (MIN_LR)
+            return lr_ratio
+
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer, 
-        lr_lambda=lambda ep: 1.0 - (ep / n_episodes) * (1.0 - lr_ratio)
+        lr_lambda=lr_lambda
     )
     criterion = nn.MSELoss()
     env = BinPackingEnv()
