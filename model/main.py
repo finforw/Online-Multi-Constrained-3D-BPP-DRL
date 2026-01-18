@@ -18,7 +18,7 @@ from env.env import BinPackingEnv
 ALPHA = 1.0
 BETA = 0.5
 OMEGA = 0.01
-PSI = 0.12
+PSI = 0.01
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
 EPISODES = 300000
@@ -71,7 +71,7 @@ def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
     return torch.tensor(returns, dtype=torch.float32, device=device)
 
 def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
-                      mask_preds, true_masks, psi=PSI):
+                      mask_preds, true_masks):
     # Flatten RL tensors
     values = torch.cat(values).view(-1)
     log_probs = torch.stack(log_probs).view(-1)
@@ -102,7 +102,7 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
     loss = (ALPHA * actor_loss + 
             BETA * critic_loss + 
             OMEGA * e_infs.mean() - 
-            psi * entropies.mean() +
+            PSI * entropies.mean() +
             AUX_LOSS_WEIGHT * graph_loss)
 
     optimizer.zero_grad()
@@ -110,7 +110,7 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
     torch.nn.utils.clip_grad_norm_(optimizer.param_groups[0]['params'], 0.5)
     optimizer.step()
 
-def run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=None, psi=PSI):
+def run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=None):
     obs, _ = env.reset(seed=seed)
     
     # Buffers
@@ -150,7 +150,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
             
             # Pass new buffers to training step
             a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
-                              mask_preds, true_masks, psi=psi)
+                              mask_preds, true_masks)
             
             avg_ep_entropy = torch.stack(entropies).mean().item()
             return total_rewards, steps_taken, env.placed_items, avg_ep_entropy
@@ -165,20 +165,11 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     total_global_steps = 0
     # totals = []
     model.train()
-    initial_psi = 0.1  # Start very high
-    final_psi = 0.01   # End low to allow convergence
-    decay_horizon = int(n_episodes * 0.83)
     best_val_score = -float('inf')
 
     for episode in range(n_episodes):
-        if episode < decay_horizon:
-            progress = episode / decay_horizon
-            psi = initial_psi - progress * (initial_psi - final_psi)
-        else:
-            # Stay at the floor for the rest of training
-            psi = final_psi
         seed = torch.randint(0, 2**32, size=()).item()
-        ep_reward, ep_steps, placed_items, ep_entropy = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed, psi=psi)
+        ep_reward, ep_steps, placed_items, ep_entropy = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed)
         total_global_steps += ep_steps
 
         # Store data (Convert steps to Millions for the plot)

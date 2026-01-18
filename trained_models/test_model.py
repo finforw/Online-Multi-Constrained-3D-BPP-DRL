@@ -134,7 +134,7 @@ def calc_space_utilization(placed_items, bin_size=1000):
 if __name__ == "__main__":
     # Example Usage
     evaluate_model(
-        model_path="trained_models/best_val_model.pt",
-        dataset_path="test_data/fizz_fuzz_fixed.pt",
+        model_path="trained_models/golden/best_val_model.pt",
+        dataset_path="test_data/cut_1.pt",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
