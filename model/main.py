@@ -17,7 +17,7 @@ from env.env import BinPackingEnv
 
 ALPHA = 1.0
 BETA = 0.5
-OMEGA = 0.01
+OMEGA = 2.0
 PSI = 0.01
 LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
