@@ -196,7 +196,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
             print(f"\rStep: {total_global_steps} | Episode: {episode + 1} | Reward: {ep_reward:.2f} | Utilization: {utilization_rate:.2f} | Entropy: {ep_entropy:.3f}", end="")
         
         # Checkpoint model every 1000 episodes
-        if episode < 300000 and (episode + 1) % 1000 == 0:
+        if (episode + 1) % 1000 == 0:
             # 1. Switch to Eval mode (turns off dropout/randomness)
             model.eval()
             
@@ -212,22 +212,6 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
             # 4. Switch back to Train mode
             model.train()
             continue
-        
-        if episode >= 300000 and (episode + 1) % 100 == 0:
-            # 1. Switch to Eval mode (turns off dropout/randomness)
-            model.eval()
-            
-            # 2. Run on fixed test set
-            _, utilization_score = test_model(model, 'test_data/cut_1.pt', device=model.device)
-            
-            # 3. Save if better
-            if utilization_score > best_val_score:
-                best_val_score = utilization_score
-                print("Saving best model with utilization: {:.3%}".format(best_val_score))
-                torch.save(model.state_dict(), os.path.join("trained_models", "best_val_model.pt"))
-            
-            # 4. Switch back to Train mode
-            model.train()
 
     return step_history, reward_history, boxes_history, utilization_history, entropy_history
 
