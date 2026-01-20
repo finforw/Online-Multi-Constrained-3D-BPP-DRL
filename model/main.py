@@ -156,7 +156,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
             return total_rewards, steps_taken, env.placed_items, avg_ep_entropy
 
 def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
-                       discount_factor=0.95, scheduler=None):
+                       discount_factor=0.95, scheduler=None, env_seed=777):
     step_history = []
     reward_history = []
     boxes_history = []     # Number of boxes placed per episode
@@ -170,6 +170,10 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     decay_horizon = 249000
     best_val_score = -float('inf')
 
+    # Create a dedicated generator for environment seeds
+    env_seed_gen = torch.Generator()
+    env_seed_gen.manual_seed(env_seed)  # Seed this specific generator
+
     for episode in range(n_episodes):
         if episode < decay_horizon:
             progress = episode / decay_horizon
@@ -177,7 +181,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
         else:
             # Stay at the floor for the rest of training
             psi = final_psi
-        seed = torch.randint(0, 2**32, size=()).item()
+        seed = torch.randint(0, 2**32, size=(), generator=env_seed_gen).item()
         ep_reward, ep_steps, placed_items, ep_entropy = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed, psi=psi)
         total_global_steps += ep_steps
 
@@ -255,7 +259,11 @@ def calc_space_utilization(placed_items, bin_size=1000):
     return total_volume / bin_size
 
 if __name__ == "__main__":
+    # STRICT DETERMINISM
     torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     ac_model = CNNMaskedActorCritic(hidden_size=256, device=device)
