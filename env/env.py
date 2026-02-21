@@ -12,7 +12,7 @@ from data import cutter
 
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
-BETA = 0.0
+BETA = 2.0
 PENALTY = 0.0
 
 class BinPackingEnv(gym.Env):
@@ -79,10 +79,10 @@ class BinPackingEnv(gym.Env):
         reward = ALPHA * box_reward + BETA * cog_reward
         next_obs = self.get_obs()
         if self.current_item_index >= len(self.items): # all items have been placed
-            return next_obs, reward, True, False, {}
+            return next_obs, reward, True, False, {'cog_distance': self.cog_distance_to_center}
         next_mask = self.get_action_mask(next_obs)
-        if np.all(next_mask == 1e-3): # penalty for no valid actions
-            return next_obs, PENALTY, True, False, {}
+        if np.all(next_mask == 1e-3): # penalty=0 for no valid actions; no more viable actions
+            return next_obs, PENALTY, True, False, {'cog_distance': self.cog_distance_to_center}
         return next_obs, reward, False, False, {}
 
     def get_obs(self):

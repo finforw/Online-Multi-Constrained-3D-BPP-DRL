@@ -83,7 +83,7 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
     mask_preds = torch.cat(mask_preds).view(-1, 100)
     true_masks = torch.stack(true_masks).view(-1, 100)
     
-    # Use MSE Loss as per Author's code
+    # Use MSE Loss for mask prediction loss
     mask_loss_func = nn.MSELoss()
     graph_loss = mask_loss_func(mask_preds, true_masks)
 
@@ -130,7 +130,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
         mask_preds.append(current_mask_pred)
         true_masks.append(torch.tensor(mask, dtype=torch.float32, device=model.device))
 
-        next_obs, reward, done, truncated, _ = env.step(action)
+        next_obs, reward, done, truncated, other = env.step(action)
 
         values.append(state_value)
         log_probs.append(log_prob)
@@ -153,7 +153,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
                               mask_preds, true_masks, psi=psi)
             
             avg_ep_entropy = torch.stack(entropies).mean().item()
-            return total_rewards, steps_taken, env.placed_items, avg_ep_entropy
+            return total_rewards, steps_taken, env.placed_items, avg_ep_entropy, other['cog_distance']
 
 def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
                        discount_factor=0.95, scheduler=None, env_seed=777):
@@ -162,6 +162,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
     boxes_history = []     # Number of boxes placed per episode
     utilization_history = [] # Space utilization rate per episode
     entropy_history = []
+    cog_history = []
     total_global_steps = 0
     # totals = []
     model.train()
@@ -182,7 +183,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
             # Stay at the floor for the rest of training
             psi = final_psi
         seed = torch.randint(0, 2**32, size=(), generator=env_seed_gen).item()
-        ep_reward, ep_steps, placed_items, ep_entropy = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed, psi=psi)
+        ep_reward, ep_steps, placed_items, ep_entropy, cog_dist = run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=seed, psi=psi)
         total_global_steps += ep_steps
 
         # Store data (Convert steps to Millions for the plot)
@@ -192,6 +193,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
         utilization_rate = calc_space_utilization(placed_items)
         utilization_history.append(utilization_rate)
         entropy_history.append(ep_entropy) # Store entropy
+        cog_history.append(cog_dist) # Store cog distance
 
         if scheduler is not None:
             scheduler.step()
@@ -217,11 +219,11 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
             model.train()
             continue
 
-    return step_history, reward_history, boxes_history, utilization_history, entropy_history
+    return step_history, reward_history, boxes_history, utilization_history, entropy_history, cog_history
 
-def plot_results(steps, rewards, boxes, utilizations, entropies, filename="training_results.png"):
+def plot_results(steps, rewards, boxes, utilizations, entropies, cogs, filename="training_results.png"):
     # 1. Increased height (from 20 to 24) to give titles more room
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 24))
+    fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(10, 24))
     
     # 2. Define a reusable function for moving averages to keep code clean
     def plot_with_ma(ax, data, label, color, ma_color, window=4500):
@@ -237,11 +239,12 @@ def plot_results(steps, rewards, boxes, utilizations, entropies, filename="train
         ax.legend(loc='upper left')
         ax.grid(True, alpha=0.3)
 
-    # Plot the 4 metrics
+    # Plot the 5 metrics
     plot_with_ma(ax1, rewards, "Reward", "blue", "red")
     plot_with_ma(ax2, boxes, "Boxes Placed", "green", "darkgreen")
     plot_with_ma(ax3, utilizations, "Utilization Rate", "purple", "darkblue")
     plot_with_ma(ax4, entropies, "Policy Entropy", "orange", "darkorange")
+    plot_with_ma(ax5, cogs, "Center of gravity distance to mid", "yellow", "darkyellow")
 
     # 3. Use tight_layout with a top padding to prevent the first title 
     # from hitting the top of the window, and h_pad to separate charts.
@@ -290,6 +293,6 @@ if __name__ == "__main__":
     criterion = nn.MSELoss()
     env = BinPackingEnv()
     # Capture the history
-    steps, rewards, boxes, utilizations, entropies = train_actor_critic(ac_model, optimizer, criterion, env, n_episodes=n_episodes, discount_factor=0.99, scheduler=scheduler)
+    steps, rewards, boxes, utilizations, entropies, cogs = train_actor_critic(ac_model, optimizer, criterion, env, n_episodes=n_episodes, discount_factor=0.99, scheduler=scheduler)
     # Call your plot function
-    plot_results(steps, rewards, boxes, utilizations, entropies)
+    plot_results(steps, rewards, boxes, utilizations, entropies, cogs)

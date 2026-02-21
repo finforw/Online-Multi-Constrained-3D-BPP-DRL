@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+MAX_WEIGHT = 50.0
+
 def to_tensor(data, device):
     """Safely converts data to float32 tensor on the correct device."""
     if torch.is_tensor(data):
@@ -22,16 +24,14 @@ class CNNMaskedActorCritic(nn.Module):
         self.bin_size = bin_size
         self.device = device
         
-        # 1. SHARED BACKBONE (Widen to 64 filters to match Author)
+        # 1. SHARED BACKBONE
         self.backbone = nn.Sequential(
-            init_layer(nn.Conv2d(4, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(6, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
         )
-        
-        flat_size = 64 * bin_size[0] * bin_size[1]
         
         # 2. ACTOR HEAD
         self.actor_features = nn.Sequential(
@@ -51,9 +51,8 @@ class CNNMaskedActorCritic(nn.Module):
         )
         self.critic_linear = init_layer(nn.Linear(hidden_size, 1), gain=1.0)
 
-        # 4. MASK HEAD (Strict Reproduction of Author's Architecture)
+        # 4. MASK HEAD
         # Conv(64->8) -> ReLU -> Flatten -> Linear -> ReLU -> Linear -> ReLU
-        #
         self.mask_head = nn.Sequential(
             init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), 
             nn.Flatten(),
@@ -68,18 +67,24 @@ class CNNMaskedActorCritic(nn.Module):
     def forward(self, obs, mask=None):
         # --- Input Processing ---
         heightmap = to_tensor(obs['heightmap'], self.device) / self.bin_size[2]
+        weightmap = to_tensor(obs['weightmap'], self.device) / MAX_WEIGHT
+
         item_raw = to_tensor(obs['item'], self.device)
         norm_scale = torch.tensor([self.bin_size[0], self.bin_size[1], self.bin_size[2]], device=self.device)
-        item_dims = item_raw[..., :3] / norm_scale 
+        item_dims = item_raw[..., :3] / norm_scale
+        item_weight = item_raw[..., 4:5] / MAX_WEIGHT
         
         if heightmap.dim() == 2: heightmap = heightmap.unsqueeze(0)
+        if weightmap.dim() == 2: weightmap = weightmap.unsqueeze(0)
         if item_dims.dim() == 1: item_dims = item_dims.unsqueeze(0)
+        if item_weight.dim() == 1: item_weight = item_weight.unsqueeze(0)
 
         batch_size = heightmap.shape[0]
         l, w = self.bin_size[0], self.bin_size[1]
         
         item_channels = item_dims.view(batch_size, 3, 1, 1).expand(batch_size, 3, l, w)
-        x = torch.cat([heightmap.unsqueeze(1), item_channels], dim=1) # 1+3 = 4 channels
+        weight_channels = item_weight.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
+        x = torch.cat([heightmap.unsqueeze(1), weightmap.unsqueeze(1), item_channels, weight_channels], dim=1)
         
         # --- Shared Backbone ---
         features = self.backbone(x)
