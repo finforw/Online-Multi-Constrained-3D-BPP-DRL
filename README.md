@@ -4,6 +4,9 @@ python -m env.env_test
 # Train model
 python -m model.main
 
+# Run evaluation
+python -m trained_models.test_model
+
 ## Golden Model Results
 Cut-1:
 Average Reward: 6.387
