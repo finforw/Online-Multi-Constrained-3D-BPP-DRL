@@ -236,7 +236,7 @@ def plot_results(steps, rewards, boxes, utilizations, entropies, cogs, filename=
     plot_with_ma(ax2, boxes, "Boxes Placed", "green", "darkgreen")
     plot_with_ma(ax3, utilizations, "Utilization Rate", "purple", "darkblue")
     plot_with_ma(ax4, entropies, "Policy Entropy", "orange", "darkorange")
-    plot_with_ma(ax5, cogs, "Center of gravity distance to mid", "yellow", "darkyellow")
+    plot_with_ma(ax5, cogs, "Center of gravity distance to mid", "blue", "red")
 
     # 3. Use tight_layout with a top padding to prevent the first title 
     # from hitting the top of the window, and h_pad to separate charts.
