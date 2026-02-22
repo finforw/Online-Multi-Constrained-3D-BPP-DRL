@@ -53,14 +53,6 @@ def choose_action_and_evaluate(model, obs, mask):
     # Return mask_pred for training
     return int(action), log_prob, state_value, e_inf, dist.entropy(), mask_pred
 
-def get_target_value(model, next_obs, reward, done, truncated, discount_factor):
-    with torch.inference_mode():
-        _, next_state_value = model(next_obs)
-
-    running = 0.0 if (done or truncated) else 1.0
-    target_value = reward + running * discount_factor * next_state_value
-    return target_value
-
 def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
     """Calculates the target returns (R) for the entire rollout."""
     returns = []

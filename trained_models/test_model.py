@@ -6,7 +6,7 @@ from env.env import BinPackingEnv
 import os
 
 def evaluate_model(model_path, dataset_path, device='cpu'):
-    print(f"--- Loading Model: {model_path} ---")
+    print(f"--- Loading Model222: {model_path} ---")
     
     # 1. Load Model Architecture
     model = CNNMaskedActorCritic(bin_size=(10, 10, 10), hidden_size=256, device=device)
@@ -27,6 +27,7 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     
     total_rewards = []
     utilizations = []
+    cog_history = []
     
     for i, box_sequence in enumerate(test_data):
         for box in box_sequence:
@@ -39,6 +40,7 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
         
         done = False
         ep_reward = 0
+        other_info = {}
         
         while not done:
             mask = env.get_action_mask(obs)
@@ -55,11 +57,12 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
                 # GREEDY ACTION (Argmax) for Testing
                 action = torch.argmax(logits, dim=1).item()
             
-            obs, reward, done, _, _ = env.step(action)
+            obs, reward, done, _, other_info = env.step(action)
             ep_reward += reward
             
         total_rewards.append(ep_reward)
         utilizations.append(calc_space_utilization(env.placed_items))
+        cog_history.append(other_info['cog_distance'])
         
         if (i+1) % 100 == 0:
             print(f"Test Case {i+1}: Reward {ep_reward:.2f}")
@@ -68,6 +71,7 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     mean_utilization = np.mean(utilizations)
     print(f"\nAverage Reward: {mean_reward:.3f}")
     print(f"Average Utilization: {mean_utilization:.3%}")
+    print(f"Average COG Distance: {np.mean(cog_history):.3f}")
     return mean_reward, mean_utilization
 
 def test_model(model, dataset_path, device='cpu'):
@@ -134,7 +138,7 @@ def calc_space_utilization(placed_items, bin_size=1000):
 if __name__ == "__main__":
     # Example Usage
     evaluate_model(
-        model_path="tmp/model1.pt",
+        model_path="trained_models/best_val_model.pt",
         dataset_path="test_data/random.pt",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
