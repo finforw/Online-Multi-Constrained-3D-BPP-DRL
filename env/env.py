@@ -32,6 +32,7 @@ class BinPackingEnv(gym.Env):
 
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
+        self.etamap = np.full((self.bin_size[0], self.bin_size[1]), 1e3, dtype=np.float32) # Initialize with a high value (infinity)
         self.placed_items = []
         self.cog_distance_to_center = -1
 
@@ -42,6 +43,7 @@ class BinPackingEnv(gym.Env):
             np.random.seed(seed)
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
         self.weightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.float32)
+        self.etamap = np.full((self.bin_size[0], self.bin_size[1]), 1e3, dtype=np.float32)
         self.items = None
         self._generate_items(seed=seed, test_sequence=test_sequence)
         self.placed_items.clear()
@@ -56,7 +58,7 @@ class BinPackingEnv(gym.Env):
         x, y = divmod(action, self.bin_size[1])
         raw_data = self.items[self.current_item_index]
         item_l, item_w, item_h = map(int, raw_data[:3])
-        _, weight = raw_data[3:]
+        arrival_time, weight = raw_data[3:]
 
         # Update heightmap and next item index.
         # Put the item into the bin.
@@ -64,8 +66,9 @@ class BinPackingEnv(gym.Env):
         self.heightmap[x:x+item_l, y:y+item_w] = current_max_height + item_h
         current_per_cell_weight = weight / (item_l * item_w)
         self.weightmap[x:x+item_l, y:y+item_w] += current_per_cell_weight
+        self.etamap[x:x+item_l, y:y+item_w] = np.minimum(self.etamap[x:x+item_l, y:y+item_w], arrival_time)
         self.current_item_index += 1
-        self.placed_items.append({'pos': (x, y, current_max_height), 'size': (item_l, item_w, item_h), 'weight': weight})
+        self.placed_items.append({'pos': (x, y, current_max_height), 'size': (item_l, item_w, item_h), 'weight': weight, 'eta': arrival_time})
         # Calculate reward and termination state.
         box_reward = (item_l * item_w * item_h) / np.prod(self.bin_size) # volume utilization reward
         cog_reward = 0
@@ -87,8 +90,8 @@ class BinPackingEnv(gym.Env):
 
     def get_obs(self):
         if self.current_item_index >= len(self.items):
-            return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": np.zeros(5, dtype=np.float32)}
-        return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "item": self.items[self.current_item_index]}
+            return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "etamap": self.etamap.copy(), "item": np.zeros(5, dtype=np.float32)}
+        return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "etamap": self.etamap.copy(), "item": self.items[self.current_item_index]}
 
     def _generate_items(self, seed=None, test_sequence=None):
         if test_sequence is not None:
@@ -105,6 +108,7 @@ class BinPackingEnv(gym.Env):
         # Initialize with the "Magic Number" (0.001) instead of 0.0
         # This prevents the Dead ReLU problem in the Mask Head.
         mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
+        current_item_eta = obs['item'][3] # arrival_time is index 3
         
         for action in range(len(mask)):
             x, y = divmod(action, self.bin_size[1])
@@ -121,6 +125,10 @@ class BinPackingEnv(gym.Env):
             # 2) Physical Stability Check (Using your 50% rule)
             if not self._physical_stability_check(x, y, item_l, item_w, current_max_h):
                 continue # Stays 1e-3
+
+            # 3) NEW: ETA Blocking Check
+            if not self._eta_blocking_check(x, y, item_l, item_w, current_item_eta):
+                continue
             
             # If we reach here, it's Valid!
             mask[action] = 1.0
@@ -157,3 +165,22 @@ class BinPackingEnv(gym.Env):
             return True
 
         return False 
+    
+    def _eta_blocking_check(self, x, y, l, w, current_eta):
+        """
+        Ensures that this item (current_eta) does not block any already placed 
+        items that have an EARLIER ETA. An item is blocked if it's behind 
+        (greater Y) the new item.
+        """
+        for placed in self.placed_items:
+            p_x, p_y, _ = placed['pos']
+            p_l, _, _ = placed['size']
+            p_eta = placed['eta']
+
+            # If placed item is behind the new item and they overlap on the X-axis
+            is_behind = p_y >= (y + w)
+            overlap_x = not (x + l <= p_x or x >= p_x + p_l)
+
+            if is_behind and overlap_x and p_eta < current_eta:
+                return False # Blocking an earlier package
+        return True

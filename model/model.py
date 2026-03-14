@@ -26,7 +26,7 @@ class CNNMaskedActorCritic(nn.Module):
         
         # 1. SHARED BACKBONE
         self.backbone = nn.Sequential(
-            init_layer(nn.Conv2d(6, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(8, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
@@ -68,23 +68,35 @@ class CNNMaskedActorCritic(nn.Module):
         # --- Input Processing ---
         heightmap = to_tensor(obs['heightmap'], self.device) / self.bin_size[2]
         weightmap = to_tensor(obs['weightmap'], self.device) / MAX_WEIGHT
+        etamap = to_tensor(obs['etamap'], self.device) / 42.0 # Normalize by max ETA range
 
         item_raw = to_tensor(obs['item'], self.device)
         norm_scale = torch.tensor([self.bin_size[0], self.bin_size[1], self.bin_size[2]], device=self.device)
         item_dims = item_raw[..., :3] / norm_scale
         item_weight = item_raw[..., 4:5] / MAX_WEIGHT
+        item_eta = item_raw[..., 3:4] / 42.0 # Normalize current item ETA
         
         if heightmap.dim() == 2: heightmap = heightmap.unsqueeze(0)
         if weightmap.dim() == 2: weightmap = weightmap.unsqueeze(0)
+        if etamap.dim() == 2: etamap = etamap.unsqueeze(0)
         if item_dims.dim() == 1: item_dims = item_dims.unsqueeze(0)
         if item_weight.dim() == 1: item_weight = item_weight.unsqueeze(0)
+        if item_eta.dim() == 1: item_eta = item_eta.unsqueeze(0)
 
         batch_size = heightmap.shape[0]
         l, w = self.bin_size[0], self.bin_size[1]
         
         item_channels = item_dims.view(batch_size, 3, 1, 1).expand(batch_size, 3, l, w)
         weight_channels = item_weight.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
-        x = torch.cat([heightmap.unsqueeze(1), weightmap.unsqueeze(1), item_channels, weight_channels], dim=1)
+        eta_channels = item_eta.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
+        x = torch.cat([
+            heightmap.unsqueeze(1), 
+            weightmap.unsqueeze(1),
+            etamap.unsqueeze(1),
+            item_channels,
+            eta_channels,
+            weight_channels
+        ], dim=1)
         
         # --- Shared Backbone ---
         features = self.backbone(x)
