@@ -128,8 +128,8 @@ class BinPackingEnv(gym.Env):
                 continue # Stays 1e-3
 
             # 3) NEW: ETA Blocking Check
-            if not self._eta_blocking_check(x, y, item_l, item_w, current_item_eta):
-                continue
+            # if not self._eta_blocking_check(x, y, item_l, item_w, current_item_eta):
+            #     continue
             
             # If we reach here, it's Valid!
             mask[action] = 1.0
