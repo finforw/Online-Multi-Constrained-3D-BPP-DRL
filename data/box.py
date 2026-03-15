@@ -7,7 +7,7 @@ class Box:
         self.width = width
         self.height = height
         self.arrival_time = random.randint(time_range[0], time_range[1])
-        self.weight = random.uniform(0, 50)
+        self.weight = random.uniform(1e-9, 50)
     
     def to_numpy_array(self):
         return np.array([self.length, self.width, self.height, self.arrival_time, self.weight])

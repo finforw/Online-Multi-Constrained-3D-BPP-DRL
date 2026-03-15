@@ -34,7 +34,7 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     for i, box_sequence in enumerate(test_data):
         # for box in box_sequence:
         #     box.append(random.randint(1, 42))  # Adds 'Arrival Time' (1 to 42)
-        #     box.append(random.uniform(0, 50)) # Adds 'Weight' (0 to 50)
+        #     box.append(random.uniform(1e-9, 50)) # Adds 'Weight' (1e-9 to 50)
         # 4. Inject Sequence into Environment
         # We need to hack the env slightly to force this specific sequence
         # Assuming env.reset() generates random boxes, we override them immediately after.
@@ -74,6 +74,60 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     print(f"\nAverage Reward: {mean_reward:.3f}")
     print(f"Average Utilization: {mean_utilization:.3%}")
     print(f"Average COG Distance: {np.mean(cog_history):.3f}")
+    return mean_reward, mean_utilization
+
+def test_model(model, dataset_path, device='cpu'):
+    # Load Test Data
+    print(f"--- Loading Dataset: {dataset_path} ---")
+    # The .pt file is likely a list of box sequences: [[(l,w,h), (l,w,h)...], [seq2], ...]
+    test_data = torch.load(dataset_path)
+    print(f"Found {len(test_data)} test cases.")
+
+    env = BinPackingEnv()
+    
+    total_rewards = []
+    utilizations = []
+    
+    for i, box_sequence in enumerate(test_data):
+        for box in box_sequence:
+            box.append(random.randint(1, 42))  # Adds 'Arrival Time' (1 to 42)
+            box.append(random.uniform(1e-9, 50)) # Adds 'Weight' (1e-9 to 50)
+        # 4. Inject Sequence into Environment
+        # We need to hack the env slightly to force this specific sequence
+        # Assuming env.reset() generates random boxes, we override them immediately after.
+        obs, _ = env.reset(test_sequence=box_sequence)
+        
+        done = False
+        ep_reward = 0
+        
+        while not done:
+            mask = env.get_action_mask(obs)
+            
+            with torch.no_grad():
+                # Get action logits from Model (Deterministic)
+                logits, _, _ = model(obs)
+                
+                # Apply Mask
+                # explicitly specify dtype=torch.float32 to prevent inference errors
+                mask_tensor = torch.tensor(mask, dtype=torch.float32, device=device).unsqueeze(0)
+                logits = logits.masked_fill(mask_tensor < 0.5, float('-inf'))
+                
+                # GREEDY ACTION (Argmax) for Testing
+                action = torch.argmax(logits, dim=1).item()
+            
+            obs, reward, done, _, _ = env.step(action)
+            ep_reward += reward
+            
+        total_rewards.append(ep_reward)
+        utilizations.append(calc_space_utilization(env.placed_items))
+        
+        if (i+1) % 100 == 0:
+            print(f"Test Case {i+1}: Reward {ep_reward:.2f}")
+
+    mean_reward = np.mean(total_rewards)
+    mean_utilization = np.mean(utilizations)
+    print(f"\nAverage Reward: {mean_reward:.3f}")
+    print(f"Average Utilization: {mean_utilization:.3%}")
     return mean_reward, mean_utilization
 
 def calc_space_utilization(placed_items, bin_size=1000):
