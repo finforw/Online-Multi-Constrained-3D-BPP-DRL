@@ -19,14 +19,15 @@ def init_layer(m, gain=1.0):
     return m
 
 class CNNMaskedActorCritic(nn.Module):
-    def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu'):
+    def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu', in_channels=8):
         super(CNNMaskedActorCritic, self).__init__()
         self.bin_size = bin_size
         self.device = device
+        self.in_channels = in_channels
         
         # 1. SHARED BACKBONE
         self.backbone = nn.Sequential(
-            init_layer(nn.Conv2d(8, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
             init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
@@ -89,14 +90,31 @@ class CNNMaskedActorCritic(nn.Module):
         item_channels = item_dims.view(batch_size, 3, 1, 1).expand(batch_size, 3, l, w)
         weight_channels = item_weight.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
         eta_channels = item_eta.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
-        x = torch.cat([
-            heightmap.unsqueeze(1), 
-            weightmap.unsqueeze(1),
-            etamap.unsqueeze(1),
-            item_channels,
-            eta_channels,
-            weight_channels
-        ], dim=1)
+        if self.in_channels == 4:
+            # Golden Model: Heightmap (1) + Item Dims (3)
+            x = torch.cat([heightmap.unsqueeze(1), item_channels], dim=1)
+            
+        elif self.in_channels == 6:
+            # COG Constraint Model: Heightmap (1) + Weightmap (1) + Item Dims (3) + Item Weight (1)
+            x = torch.cat([
+                heightmap.unsqueeze(1), 
+                weightmap.unsqueeze(1), 
+                item_channels, 
+                weight_channels
+            ], dim=1)
+            
+        elif self.in_channels == 8:
+            # ETA + COG Constraint Model: All channels
+            x = torch.cat([
+                heightmap.unsqueeze(1), 
+                weightmap.unsqueeze(1),
+                etamap.unsqueeze(1),
+                item_channels,
+                eta_channels,
+                weight_channels
+            ], dim=1)
+        else:
+            raise ValueError(f"Unrecognized number of input channels: {self.in_channels}")
         
         # --- Shared Backbone ---
         features = self.backbone(x)

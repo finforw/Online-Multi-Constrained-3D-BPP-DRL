@@ -47,6 +47,7 @@ class BinPackingEnv(gym.Env):
         self.items = None
         self._generate_items(seed=seed, test_sequence=test_sequence)
         self.placed_items.clear()
+        self.cog_distance_to_center = -1
         return self.get_obs(), {}
 
     def step(self, action):
@@ -85,7 +86,7 @@ class BinPackingEnv(gym.Env):
             return next_obs, reward, True, False, {'cog_distance': self.cog_distance_to_center}
         next_mask = self.get_action_mask(next_obs)
         if np.all(next_mask == 1e-3): # penalty=0 for no valid actions; no more viable actions
-            return next_obs, PENALTY, True, False, {'cog_distance': self.cog_distance_to_center}
+            return next_obs, reward + PENALTY, True, False, {'cog_distance': self.cog_distance_to_center}
         return next_obs, reward, False, False, {}
 
     def get_obs(self):
