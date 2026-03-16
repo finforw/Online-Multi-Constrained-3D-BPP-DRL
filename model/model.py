@@ -47,11 +47,15 @@ class SpatialSelfAttention(nn.Module):
         return self.gamma * out + x
 
 class CNNMaskedActorCritic(nn.Module):
-    def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu', in_channels=8):
+    def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu', exclude_eta=False, exclude_cog=False):
         super(CNNMaskedActorCritic, self).__init__()
         self.bin_size = bin_size
         self.device = device
-        self.in_channels = in_channels
+        self.in_channels = 8 # Default to all channels
+        if exclude_eta and exclude_cog:
+            self.in_channels = 4 # Heightmap + Item Dims
+        elif exclude_eta:
+            self.in_channels = 6 # Heightmap + Weightmap + Item Dims + Item Weight
         
         # 1. SHARED BACKBONE
         self.backbone = nn.Sequential(

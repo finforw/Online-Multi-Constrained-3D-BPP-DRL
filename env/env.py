@@ -16,7 +16,7 @@ BETA = 2.0
 PENALTY = 0.0
 
 class BinPackingEnv(gym.Env):
-    def __init__(self, bin_size=(10, 10, 10)):
+    def __init__(self, bin_size=(10, 10, 10), exclude_eta=False, exclude_cog=False):
         super(BinPackingEnv, self).__init__()
         self.bin_size = bin_size
         
@@ -35,6 +35,10 @@ class BinPackingEnv(gym.Env):
         self.etamap = np.full((self.bin_size[0], self.bin_size[1]), 1e3, dtype=np.float32) # Initialize with a high value (infinity)
         self.placed_items = []
         self.cog_distance_to_center = -1
+        self.beta = BETA
+        if exclude_cog:
+            self.beta = 0.0 # Ignore COG reward
+        self.enable_eta_check = not exclude_eta
 
     def reset(self, seed=None, options=None, test_sequence=None):
         super().reset(seed=seed)
@@ -80,7 +84,7 @@ class BinPackingEnv(gym.Env):
             new_distance = np.linalg.norm(cog - np.array(self.bin_size) / 2)
             cog_reward = (self.cog_distance_to_center - new_distance) / (np.linalg.norm(np.array(self.bin_size) / 2)) # normalize by max possible distance
             self.cog_distance_to_center = new_distance
-        reward = ALPHA * box_reward + BETA * cog_reward
+        reward = ALPHA * box_reward + self.beta * cog_reward
         next_obs = self.get_obs()
         if self.current_item_index >= len(self.items): # all items have been placed
             return next_obs, reward, True, False, {'cog_distance': self.cog_distance_to_center}
@@ -127,8 +131,8 @@ class BinPackingEnv(gym.Env):
             if not self._physical_stability_check(x, y, item_l, item_w, current_max_h):
                 continue # Stays 1e-3
 
-            # 3) NEW: ETA Blocking Check
-            if not self._eta_blocking_check(x, y, item_l, item_w, current_item_eta):
+            # 3) ETA Blocking Check
+            if self.enable_eta_check and not self._eta_blocking_check(x, y, item_l, item_w, current_item_eta):
                 continue
             
             # If we reach here, it's Valid!

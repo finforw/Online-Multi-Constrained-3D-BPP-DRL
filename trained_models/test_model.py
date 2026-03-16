@@ -76,14 +76,14 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     print(f"Average COG Distance: {np.mean(cog_history):.3f}")
     return mean_reward, mean_utilization
 
-def test_model(model, dataset_path, device='cpu'):
+def test_model(model, dataset_path, args, device='cpu'):
     # Load Test Data
     print(f"--- Loading Dataset: {dataset_path} ---")
     # The .pt file is likely a list of box sequences: [[(l,w,h), (l,w,h)...], [seq2], ...]
     test_data = torch.load(dataset_path)
     print(f"Found {len(test_data)} test cases.")
 
-    env = BinPackingEnv()
+    env = BinPackingEnv(bin_size=(10, 10, 10), exclude_eta=args.noeta, exclude_cog=args.nocog)
     
     total_rewards = []
     utilizations = []

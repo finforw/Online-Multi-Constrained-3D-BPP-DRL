@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sys
 import os
+import argparse
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -147,7 +148,7 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
             avg_ep_entropy = torch.stack(entropies).mean().item()
             return total_rewards, steps_taken, env.placed_items, avg_ep_entropy, other['cog_distance']
 
-def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
+def train_actor_critic(model, optimizer, criterion, env, args, n_episodes=2000,
                        discount_factor=0.95, scheduler=None, env_seed=777):
     step_history = []
     reward_history = []
@@ -199,7 +200,7 @@ def train_actor_critic(model, optimizer, criterion, env, n_episodes=2000,
             model.eval()
             
             # 2. Run on fixed test set
-            _, utilization_score = test_model(model, 'test_data/cut_1.pt', device=model.device)
+            _, utilization_score = test_model(model, 'test_data/cut_1.pt', args, device=model.device)
             
             # 3. Save if better
             if utilization_score > best_val_score:
@@ -261,7 +262,23 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    ac_model = CNNMaskedActorCritic(hidden_size=256, device=device)
+
+    # Define command-line arguments.
+    parser = argparse.ArgumentParser(description="training script for 3D Bin Packing DRL model")
+    parser.add_argument(
+        '--noeta', 
+        action='store_true', 
+        help='whether to remove ETA constraint during training (default: False)'
+    )
+
+    parser.add_argument(
+        '--nocog',
+        action='store_true',
+        help='whether to remove COG constraint during training (default: False)',
+    )
+    args = parser.parse_args()
+
+    ac_model = CNNMaskedActorCritic(hidden_size=256, device=device, exclude_eta=args.noeta, exclude_cog=args.nocog)
     n_episodes = EPISODES
 
     # Define the cutoff point for lr decay.
@@ -283,8 +300,8 @@ if __name__ == "__main__":
         lr_lambda=lr_lambda
     )
     criterion = nn.MSELoss()
-    env = BinPackingEnv()
+    env = BinPackingEnv(bin_size=(10, 10, 10), exclude_eta=args.noeta, exclude_cog=args.nocog)
     # Capture the history
-    steps, rewards, boxes, utilizations, entropies, cogs = train_actor_critic(ac_model, optimizer, criterion, env, n_episodes=n_episodes, discount_factor=0.99, scheduler=scheduler)
+    steps, rewards, boxes, utilizations, entropies, cogs = train_actor_critic(ac_model, optimizer, criterion, env, args, n_episodes=n_episodes, discount_factor=0.99, scheduler=scheduler)
     # Call your plot function
     plot_results(steps, rewards, boxes, utilizations, entropies, cogs)
