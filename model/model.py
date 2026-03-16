@@ -18,6 +18,34 @@ def init_layer(m, gain=1.0):
             nn.init.constant_(m.bias, 0)
     return m
 
+class SpatialSelfAttention(nn.Module):
+    def __init__(self, in_channels):
+        super(SpatialSelfAttention, self).__init__()
+        self.query = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
+        self.key = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
+        self.value = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.gamma = nn.Parameter(torch.zeros(1)) # Learnable scale parameter
+
+    def forward(self, x):
+        batch_size, C, width, height = x.size()
+        
+        # Flatten spatial dimensions: (B, C, W*H)
+        proj_query = self.query(x).view(batch_size, -1, width * height).permute(0, 2, 1)
+        proj_key = self.key(x).view(batch_size, -1, width * height)
+        
+        # Calculate Attention Map: (B, W*H, W*H)
+        energy = torch.bmm(proj_query, proj_key)
+        attention = F.softmax(energy, dim=-1)
+        
+        proj_value = self.value(x).view(batch_size, -1, width * height)
+        
+        # Apply attention to values
+        out = torch.bmm(proj_value, attention.permute(0, 2, 1))
+        out = out.view(batch_size, C, width, height)
+        
+        # Residual connection
+        return self.gamma * out + x
+
 class CNNMaskedActorCritic(nn.Module):
     def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu', in_channels=8):
         super(CNNMaskedActorCritic, self).__init__()
@@ -27,11 +55,17 @@ class CNNMaskedActorCritic(nn.Module):
         
         # 1. SHARED BACKBONE
         self.backbone = nn.Sequential(
-            init_layer(nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+            nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+            nn.ReLU(),
+            SpatialSelfAttention(64), # Self-Attention Layer to capture global spatial dependencies
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+            nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+            nn.ReLU(),
+            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+            nn.ReLU(),
         )
         
         # 2. ACTOR HEAD
