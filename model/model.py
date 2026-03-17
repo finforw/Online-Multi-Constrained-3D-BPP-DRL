@@ -52,11 +52,13 @@ class CNNMaskedActorCritic(nn.Module):
         self.bin_size = bin_size
         self.device = device
         self.use_sota = use_sota
+        self.exclude_eta = exclude_eta
+        self.exclude_cog = exclude_cog
         self.in_channels = 8 # Default to all channels
         if exclude_eta and exclude_cog:
             self.in_channels = 4 # Heightmap + Item Dims
-        elif exclude_eta:
-            self.in_channels = 6 # Heightmap + Weightmap + Item Dims + Item Weight
+        else:
+            self.in_channels = 6
         
         # 1. SHARED BACKBONE
         if self.use_sota:
@@ -148,13 +150,22 @@ class CNNMaskedActorCritic(nn.Module):
             # Golden Model: Heightmap (1) + Item Dims (3)
             x = torch.cat([heightmap.unsqueeze(1), item_channels], dim=1)
             
-        elif self.in_channels == 6:
+        elif self.in_channels == 6 and self.exclude_eta:
             # COG Constraint Model: Heightmap (1) + Weightmap (1) + Item Dims (3) + Item Weight (1)
             x = torch.cat([
                 heightmap.unsqueeze(1), 
                 weightmap.unsqueeze(1), 
                 item_channels, 
                 weight_channels
+            ], dim=1)
+        
+        elif self.in_channels == 6 and self.exclude_cog:
+            # ETA Constraint Model: Heightmap (1) + Etamap (1) + Item Dims (3) + Item ETA (1)
+            x = torch.cat([
+                heightmap.unsqueeze(1), 
+                etamap.unsqueeze(1), 
+                item_channels, 
+                eta_channels
             ], dim=1)
             
         elif self.in_channels == 8:
