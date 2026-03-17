@@ -18,11 +18,6 @@ Average Utilization: 69.095%
 
 ## Golden Model Results (Updated)
 
-SOTA No-Constraints:
-Average Reward: 7.102
-Average Utilization: 71.021%
-Average COG Distance: 1.478
-
 SOTA with soft constraints:
 Average Reward: 8.088
 Average Utilization: 71.021%
@@ -33,12 +28,36 @@ Average Reward: 4.260
 Average Utilization: 35.873%
 Average COG Distance: 2.835
 
-Soft constraints on COG (negative reward)
+SOTA Trained with Constraints Results:
+
+No constraints:
+Average Reward: 7.102
+Average Utilization: 71.021%
+Average COG Distance: 1.478
+
+Soft constraints on COG:
 Average Reward: 7.686
 Average Utilization: 66.809%
 Average COG Distance: 1.396
 
-Soft constraints on COG (negative reward) plus hard constraints on ETA
+Soft constraints on COG plus hard constraints on ETA:
 Average Reward: 6.747
 Average Utilization: 58.075%
 Average COG Distance: 1.679
+
+Our Model Results:
+
+No constraints:
+Average Reward: 7.203
+Average Utilization: 72.032%
+Average COG Distance: 1.489
+
+Soft constraints on COG (negative reward):
+Average Reward: 7.951
+Average Utilization: 69.590%
+Average COG Distance: 1.453
+
+Soft constraints on COG plus hard constraints on ETA:
+Average Reward: 6.836
+Average Utilization: 58.833%
+Average COG Distance: 1.622

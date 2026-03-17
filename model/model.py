@@ -47,10 +47,11 @@ class SpatialSelfAttention(nn.Module):
         return self.gamma * out + x
 
 class CNNMaskedActorCritic(nn.Module):
-    def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu', exclude_eta=False, exclude_cog=False):
+    def __init__(self, bin_size=(10, 10, 10), hidden_size=256, device='cpu', exclude_eta=False, exclude_cog=False, use_sota=False):
         super(CNNMaskedActorCritic, self).__init__()
         self.bin_size = bin_size
         self.device = device
+        self.use_sota = use_sota
         self.in_channels = 8 # Default to all channels
         if exclude_eta and exclude_cog:
             self.in_channels = 4 # Heightmap + Item Dims
@@ -58,19 +59,34 @@ class CNNMaskedActorCritic(nn.Module):
             self.in_channels = 6 # Heightmap + Weightmap + Item Dims + Item Weight
         
         # 1. SHARED BACKBONE
-        self.backbone = nn.Sequential(
-            init_layer(nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
-            nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
-            nn.ReLU(),
-            SpatialSelfAttention(64), # Self-Attention Layer to capture global spatial dependencies
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
-            nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
-            nn.ReLU(),
-            init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
-            nn.ReLU(),
-        )
+        if self.use_sota:
+            # SOTA Model: Simpler architecture without attention
+            self.backbone = nn.Sequential(
+                init_layer(nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+            )
+        else:
+            self.backbone = nn.Sequential(
+                init_layer(nn.Conv2d(self.in_channels, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                SpatialSelfAttention(64), # Self-Attention Layer to capture global spatial dependencies
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+                init_layer(nn.Conv2d(64, 64, kernel_size=3, padding=1), gain=nn.init.calculate_gain('relu')), 
+                nn.ReLU(),
+            )
         
         # 2. ACTOR HEAD
         self.actor_features = nn.Sequential(

@@ -3,8 +3,9 @@ import numpy as np
 import random
 from model.model import CNNMaskedActorCritic
 from env.env import BinPackingEnv
+import argparse
 
-def evaluate_model(model_path, dataset_path, device='cpu'):
+def evaluate_model(model_path, dataset_path, args, device='cpu'):
     print(f"--- Loading Model: {model_path} ---")
     
     # 1. Load Weights
@@ -13,7 +14,7 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     print(f"Detected {in_channels} input channels for this model.")
 
     # 2. Load Model Architecture
-    model = CNNMaskedActorCritic(bin_size=(10, 10, 10), hidden_size=256, device=device, in_channels=in_channels)
+    model = CNNMaskedActorCritic(bin_size=(10, 10, 10), hidden_size=256, device=device, exclude_eta=args.noeta, exclude_cog=args.nocog, use_sota=args.golden)
 
     model.load_state_dict(checkpoint)
     model.to(device)
@@ -25,7 +26,7 @@ def evaluate_model(model_path, dataset_path, device='cpu'):
     test_data = torch.load(dataset_path)
     print(f"Found {len(test_data)} test cases.")
 
-    env = BinPackingEnv()
+    env = BinPackingEnv(bin_size=(10, 10, 10), exclude_eta=args.noeta, exclude_cog=args.nocog)
     
     total_rewards = []
     utilizations = []
@@ -138,9 +139,30 @@ def calc_space_utilization(placed_items, bin_size=1000):
     return total_volume / bin_size
 
 if __name__ == "__main__":
-    # Example Usage
+    parser = argparse.ArgumentParser(description="testing/inference script for 3D Bin Packing DRL model")
+    parser.add_argument(
+        '--noeta', 
+        action='store_true', 
+        help='whether to remove ETA constraint during training (default: False)'
+    )
+
+    parser.add_argument(
+        '--nocog',
+        action='store_true',
+        help='whether to remove COG constraint during training (default: False)',
+    )
+
+    parser.add_argument(
+        '--golden',
+        action='store_true',
+        help='whether to use SOTA model or not (default: False)',
+    )
+
+    args = parser.parse_args()
+
     evaluate_model(
-        model_path="trained_models/golden/model_cog.pt",
-        dataset_path="test_data/fizz_fuzz.pt",
+        model_path="trained_models/ours/vanilla.pt",
+        dataset_path="test_data/cut_1_expanded.pt",
+        args=args,
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
