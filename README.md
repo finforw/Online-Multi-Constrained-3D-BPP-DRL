@@ -16,7 +16,7 @@ Fizz-Fuzz:
 Average Reward: 6.496
 Average Utilization: 69.095%
 
-## Golden Model Results (Updated)
+## Model Results (Updated)
 
 SOTA with soft constraints:
 Average Reward: 8.088

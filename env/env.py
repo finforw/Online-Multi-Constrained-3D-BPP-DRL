@@ -95,7 +95,7 @@ class BinPackingEnv(gym.Env):
         normalized_y = y / self.bin_size[1] 
         # The closer the normalized ETA matches the normalized Depth, the higher the reward.
         # E.g., item with ETA 42.0 placed at Y=10 gives distance 0 (Max reward)
-        eta_alignment_reward = 1.0 - abs(normalized_eta - normalized_y)
+        eta_alignment_reward = 1.0 - 2.0 * abs(normalized_eta - normalized_y)
         reward = ALPHA * box_reward + self.beta * cog_reward + self.gamma * eta_alignment_reward
         next_obs = self.get_obs()
         if self.current_item_index >= len(self.items): # all items have been placed
