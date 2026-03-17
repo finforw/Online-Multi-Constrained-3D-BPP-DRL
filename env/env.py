@@ -12,7 +12,7 @@ from data import cutter
 
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
-BETA = 2.0
+BETA = 2.5
 GAMMA = 0.25
 PENALTY = 0.0
 
