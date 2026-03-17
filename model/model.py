@@ -57,7 +57,7 @@ class CNNMaskedActorCritic(nn.Module):
         self.in_channels = 8 # Default to all channels
         if exclude_eta and exclude_cog:
             self.in_channels = 4 # Heightmap + Item Dims
-        else:
+        elif exclude_eta or exclude_cog:
             self.in_channels = 6
         
         # 1. SHARED BACKBONE
