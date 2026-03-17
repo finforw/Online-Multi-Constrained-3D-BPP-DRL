@@ -13,7 +13,7 @@ from data import cutter
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
 BETA = 2.0
-GAMMA = 0.3
+GAMMA = 0.25
 PENALTY = 0.0
 
 class BinPackingEnv(gym.Env):
@@ -96,7 +96,6 @@ class BinPackingEnv(gym.Env):
         # The closer the normalized ETA matches the normalized Depth, the higher the reward.
         # E.g., item with ETA 42.0 placed at Y=10 gives distance 0 (Max reward)
         eta_alignment_reward = 1.0 - abs(normalized_eta - normalized_y)
-        print("box_reward:", ALPHA*box_reward, "cog_reward:", self.beta*cog_reward, "eta_alignment_reward:", self.gamma*eta_alignment_reward)
         reward = ALPHA * box_reward + self.beta * cog_reward + self.gamma * eta_alignment_reward
         next_obs = self.get_obs()
         if self.current_item_index >= len(self.items): # all items have been placed
