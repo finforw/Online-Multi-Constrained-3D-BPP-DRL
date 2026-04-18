@@ -24,7 +24,7 @@ LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
 EPISODES = 350000
 # mask pred loss
-AUX_LOSS_WEIGHT = 0.5
+AUX_LOSS_WEIGHT = 0.1
 
 
 def choose_action_and_evaluate(model, obs, mask):

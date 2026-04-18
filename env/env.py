@@ -89,14 +89,19 @@ class BinPackingEnv(gym.Env):
             cog_reward = (self.cog_distance_to_center - new_distance) / (np.linalg.norm(np.array(self.bin_size) / 2)) # normalize by max possible distance
             self.cog_distance_to_center = new_distance
         
-        # Calculate ETA alignment reward
-        max_eta = 42.0
-        normalized_eta = arrival_time / max_eta
-        normalized_y = y / self.bin_size[1] 
-        # The closer the normalized ETA matches the normalized Depth, the higher the reward.
-        # E.g., item with ETA 42.0 placed at Y=10 gives distance 0 (Max reward)
-        eta_alignment_reward = 1.0 - 2.0 * abs(normalized_eta - normalized_y)
-        reward = ALPHA * box_reward + self.beta * cog_reward + self.gamma * eta_alignment_reward
+        # 1. Base Volume Reward (e.g., placing an 8 volume box in 1000 bin gives 0.008)
+        base_reward = ALPHA * box_reward 
+        
+        # 2. COG Modifier (Self.beta scales the impact)
+        cog_modifier = self.beta * cog_reward
+        
+        # 3. Total Reward
+        # We drop the ETA reward entirely because the get_action_mask() strictly 
+        # prevents ETA violations. Don't punish valid topological placements!
+        reward = base_reward + cog_modifier
+        # A minimum of 0.01 for any successful placement.
+        reward = max(0.01, reward)
+
         next_obs = self.get_obs()
         if self.current_item_index >= len(self.items): # all items have been placed
             return next_obs, reward, True, False, {'cog_distance': self.cog_distance_to_center}
