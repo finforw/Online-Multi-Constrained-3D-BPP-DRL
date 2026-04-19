@@ -90,9 +90,9 @@ def test_model(model, dataset_path, args, device='cpu'):
     utilizations = []
     
     for i, box_sequence in enumerate(test_data):
-        for box in box_sequence:
-            box.append(random.randint(1, 42))  # Adds 'Arrival Time' (1 to 42)
-            box.append(random.uniform(1e-9, 50)) # Adds 'Weight' (1e-9 to 50)
+        # for box in box_sequence:
+        #     box.append(random.randint(1, 42))  # Adds 'Arrival Time' (1 to 42)
+        #     box.append(random.uniform(1e-9, 50)) # Adds 'Weight' (1e-9 to 50)
         # 4. Inject Sequence into Environment
         # We need to hack the env slightly to force this specific sequence
         # Assuming env.reset() generates random boxes, we override them immediately after.

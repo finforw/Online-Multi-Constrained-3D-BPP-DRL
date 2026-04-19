@@ -10,4 +10,4 @@ for _ in range(2100):
     cutter.reset()
 
 print(res)
-torch.save(res, 'test_data/fizz_fuzz.pt')
+torch.save(res, 'test_data/cut_1_temporal.pt')

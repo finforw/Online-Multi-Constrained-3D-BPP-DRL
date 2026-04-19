@@ -200,7 +200,7 @@ def train_actor_critic(model, optimizer, criterion, env, args, n_episodes=2000,
             model.eval()
             
             # 2. Run on fixed test set
-            _, utilization_score = test_model(model, 'test_data/cut_1.pt', args, device=model.device)
+            _, utilization_score = test_model(model, 'test_data/cut_1_temporal.pt', args, device=model.device)
             
             # 3. Save if better
             if utilization_score > best_val_score:

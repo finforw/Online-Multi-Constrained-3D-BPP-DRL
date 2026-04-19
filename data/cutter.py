@@ -5,8 +5,8 @@ from .box import Box
 
 class Cutter:
     def __init__(self, length, width, height, max_len=5, max_width=5, max_height=5, min_len=2, min_width=2, min_height=2):
-        # List of available spaces to be cut
-        self.spaces = [(length, width, height, 0)]
+        # Store 6 values: (length, width, height, x_pos, y_pos, z_pos)
+        self.spaces = [(length, width, height, 0, 0, 0)]
         self.boxes = []
         self.length = length
         self.width = width
@@ -36,10 +36,38 @@ class Cutter:
             self.spaces = copy.deepcopy(res)
             res.clear()
 
-        # CUT-1 sort by height.
-        self.spaces.sort(key=lambda x: x[3])
-        for space in self.spaces:
-            self.boxes.append(Box(space[0], space[1], space[2], util.get_time_range()).to_numpy_array())
+        # ---------------------------------------------------------
+        # 1) Sort spaces strictly by Z-coordinate (bottom-to-top)
+        # ---------------------------------------------------------
+        # We tie-break with X and Y just to be deterministic if Z is identical
+        self.spaces.sort(key=lambda b: (b[5], b[4], b[3]))
+        
+        num_boxes = len(self.spaces)
+        time_min, time_max = util.get_time_range()
+        
+        # Generate exactly `num_boxes` random timestamps and sort them ascending
+        timestamps = sorted([random.randint(time_min, time_max) for _ in range(num_boxes)])
+
+        # ---------------------------------------------------------
+        # 2) Assign timestamps strictly based on Y-coordinate
+        # ---------------------------------------------------------
+        # Get the indices that would sort the `self.spaces` list by Y-coordinate
+        # self.spaces[i][4] refers to the Y-coordinate of the i-th box.
+        y_sorted_indices = sorted(range(num_boxes), key=lambda i: self.spaces[i][4])
+        
+        # Create an array to hold the mapped timestamps
+        final_timestamps = [0] * num_boxes
+        
+        # The lowest Y gets the lowest timestamp, the highest Y gets the highest timestamp
+        for rank, original_index in enumerate(y_sorted_indices):
+            final_timestamps[original_index] = timestamps[rank]
+
+        # ---------------------------------------------------------
+        # 3) Build final array keeping the Z-order sequence unchanged
+        # ---------------------------------------------------------
+        for space, t in zip(self.spaces, final_timestamps):
+            # space[0, 1, 2] are the dimensions (l, w, h)
+            self.boxes.append(Box(space[0], space[1], space[2], (t, t)).to_numpy_array())
 
     def generate_boxes(self, seed=None):
         if seed is not None:
@@ -54,7 +82,7 @@ class Cutter:
         return len(self.boxes)
     
     def reset(self):
-        self.spaces = [(self.length, self.width, self.height, 0)]
+        self.spaces = [(self.length, self.width, self.height, 0, 0, 0)]
         self.boxes.clear()
     
     def _check_box(self, box):
@@ -64,7 +92,9 @@ class Cutter:
         return x_flag * 1 + y_flag * 2 + z_flag * 4
     
     def _split(self, box, mask):
-        # Axis that needs to be splitted.
+        # Unpack the 6 values so we can track exact (x, y, z) placement during the cuts
+        l, w, h, x, y, z = box
+        
         axis_list = []
         if 1 & mask:
             axis_list.append(0)
@@ -73,45 +103,19 @@ class Cutter:
         if 4 & mask:
             axis_list.append(2)
         axis = random.choice(axis_list)
-        pos_range = ()
-        base_h = box[3]
-        if axis == 0:
-            pos_range = (self.min_len, box[0] - self.min_len)
-        if axis == 1:
-            pos_range = (self.min_width, box[1] - self.min_width)
-        if axis == 2:
-            pos_range = (self.min_height, box[2] - self.min_height)
-        pos = random.randint(pos_range[0], pos_range[1])
 
-        # Split on axis at pos
+        # Split and preserve relative 3D FTB coordinates
         if axis == 0:
-            box1 = (pos, box[1], box[2], base_h)
-            box2 = (box[0] - pos, box[1], box[2], base_h)
-        if axis == 1:
-            box1 = (box[0], pos, box[2], base_h)
-            box2 = (box[0], box[1] - pos, box[2], base_h)
-        if axis == 2:
-            box1 = (box[0], box[1], pos, base_h)
-            box2 = (box[0], box[1], box[2] - pos, base_h + pos)
+            pos = random.randint(self.min_len, l - self.min_len)
+            box1 = (pos, w, h, x, y, z)
+            box2 = (l - pos, w, h, x + pos, y, z)
+        elif axis == 1:
+            pos = random.randint(self.min_width, w - self.min_width)
+            box1 = (l, pos, h, x, y, z)
+            box2 = (l, w - pos, h, x, y + pos, z) 
+        else: # axis == 2
+            pos = random.randint(self.min_height, h - self.min_height)
+            box1 = (l, w, pos, x, y, z)
+            box2 = (l, w, h - pos, x, y, z + pos)
+            
         return box1, box2
-
-# if __name__ == "__main__":
-#     cutter = Cutter(10, 10, 10, 5, 5, 5, 2, 2, 2)
-#     cutter.cut()
-#     boxes = cutter.get_boxes()
-#     print(len(boxes))
-    # for b in boxes:
-    #     print(b)
-    # print("Total boxes:", cutter.get_box_count())
-    # print("--------------------------------------")
-    # cutter.cut()
-    # boxes = cutter.get_boxes()
-    # for b in boxes:
-    #     print(b)
-    # print("Total boxes:", cutter.get_box_count())
-    # print("--------------------------------------")
-    # cutter.cut()
-    # boxes = cutter.get_boxes()
-    # for b in boxes:
-    #     print(b)
-    # print("Total boxes:", cutter.get_box_count())
