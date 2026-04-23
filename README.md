@@ -48,9 +48,9 @@ Average COG Distance: 1.679
 Our Model Results:
 
 No constraints:
-Average Reward: 7.203
-Average Utilization: 72.032%
-Average COG Distance: 1.489
+Average Reward: 7.590
+Average Utilization: 75.901%
+Average COG Distance: 1.441
 
 Soft constraints on COG (negative reward):
 Average Reward: 7.951
@@ -63,6 +63,6 @@ Average Utilization: 59.106%
 Average COG Distance: 1.638
 
 Soft constraints on COG plus hard constraints on ETA:
-Average Reward: 6.836
-Average Utilization: 58.833%
-Average COG Distance: 1.622
+Average Reward: 6.894
+Average Utilization: 59.417%
+Average COG Distance: 1.637
