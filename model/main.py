@@ -24,7 +24,7 @@ LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
 EPISODES = 350000
 # mask pred loss
-AUX_LOSS_WEIGHT = 0.5
+# AUX_LOSS_WEIGHT = 0.5
 
 
 def choose_action_and_evaluate(model, obs, mask):
@@ -63,8 +63,7 @@ def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
         returns.insert(0, R)
     return torch.tensor(returns, dtype=torch.float32, device=device)
 
-def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
-                      mask_preds, true_masks, psi=PSI):
+def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=PSI):
     # Flatten RL tensors
     values = torch.cat(values).view(-1)
     log_probs = torch.stack(log_probs).view(-1)
@@ -72,17 +71,8 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
     entropies = torch.stack(entropies).view(-1)
     e_infs = torch.stack(e_infs).view(-1)
 
-    # --- 1. MASK LOSS (MSE) ---
-    mask_preds = torch.cat(mask_preds).view(-1, 100)
-    true_masks = torch.stack(true_masks).view(-1, 100)
-    
-    # Use MSE Loss for mask prediction loss
-    mask_loss_func = nn.MSELoss()
-    graph_loss = mask_loss_func(mask_preds, true_masks)
-
-    # --- 2. RL Update ---
+    # --- RL Update ---
     advantages = returns - values.detach()
-    # Safe Normalization
     if advantages.numel() > 1:
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     else:
@@ -91,12 +81,12 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
     actor_loss = -(log_probs * advantages).mean()
     critic_loss = F.mse_loss(values, returns)
     
-    # --- 3. TOTAL LOSS ---
+    # --- TOTAL LOSS ---
+    # Mask loss entirely removed to prevent gradient conflict
     loss = (ALPHA * actor_loss + 
             BETA * critic_loss + 
             OMEGA * e_infs.mean() - 
-            psi * entropies.mean() +
-            AUX_LOSS_WEIGHT * graph_loss)
+            psi * entropies.mean())
 
     optimizer.zero_grad()
     loss.backward()
@@ -106,22 +96,17 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
 def run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=None, psi=PSI):
     obs, _ = env.reset(seed=seed)
     
-    # Buffers
+    # Buffers (mask_preds and true_masks removed)
     values, log_probs, rewards, entropies, e_infs = [], [], [], [], []
-    mask_preds, true_masks = [], [] # <--- New Buffers
     
     total_rewards = 0
     steps_taken = 0
     
     while True:
-        mask = env.get_action_mask(obs) # Soft Mask (1.0 or 0.001)
+        mask = env.get_action_mask(obs) 
         
-        # Unpack mask_pred
-        action, log_prob, state_value, e_inf, e_entropy, current_mask_pred = choose_action_and_evaluate(model, obs, mask)
-        
-        # Store prediction and ground truth
-        mask_preds.append(current_mask_pred)
-        true_masks.append(torch.tensor(mask, dtype=torch.float32, device=model.device))
+        # Unpack (mask_pred is returned by the model to prevent unpack errors, but safely ignored with '_')
+        action, log_prob, state_value, e_inf, e_entropy, _ = choose_action_and_evaluate(model, obs, mask)
 
         next_obs, reward, done, truncated, other = env.step(action)
 
@@ -137,13 +122,12 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
 
         if done or truncated:
             with torch.no_grad():
-                _, final_value, _ = model(next_obs) # Ignore mask_pred here
+                _, final_value, _ = model(next_obs)
             
             returns = calculate_returns(rewards, final_value.item(), done, discount_factor, device=model.device)
             
-            # Pass new buffers to training step
-            a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
-                              mask_preds, true_masks, psi=psi)
+            # Training step directly utilizing raw A2C gradients
+            a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=psi)
             
             avg_ep_entropy = torch.stack(entropies).mean().item()
             return total_rewards, steps_taken, env.placed_items, avg_ep_entropy, other['cog_distance']

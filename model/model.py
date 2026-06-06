@@ -18,6 +18,22 @@ def init_layer(m, gain=1.0):
             nn.init.constant_(m.bias, 0)
     return m
 
+class TemporalGraphAttention(nn.Module):
+    def __init__(self, node_features=8, hidden_dim=64, num_heads=4):
+        super(TemporalGraphAttention, self).__init__()
+        self.node_embedder = nn.Sequential(
+            init_layer(nn.Linear(node_features, hidden_dim)), nn.ReLU(),
+            init_layer(nn.Linear(hidden_dim, hidden_dim)), nn.ReLU()
+        )
+        self.gat = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=num_heads, batch_first=True)
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+
+    def forward(self, nodes, adj_mask):
+        x = self.node_embedder(nodes)
+        attn_out, _ = self.gat(query=x, key=x, value=x, attn_mask=adj_mask[0])
+        x = self.layer_norm(x + attn_out)
+        return x.mean(dim=1) # Global pooling of temporal tension
+
 class SpatialSelfAttention(nn.Module):
     def __init__(self, in_channels):
         super(SpatialSelfAttention, self).__init__()
@@ -54,11 +70,15 @@ class CNNMaskedActorCritic(nn.Module):
         self.use_sota = use_sota
         self.exclude_eta = exclude_eta
         self.exclude_cog = exclude_cog
-        self.in_channels = 8 # Default to all channels
-        if exclude_eta and exclude_cog:
-            self.in_channels = 4 # Heightmap + Item Dims
-        elif exclude_eta or exclude_cog:
-            self.in_channels = 6
+        # The CNN NEVER sees the ETA map anymore. It handles geometry only.
+        if exclude_cog:
+            self.in_channels = 4 # Heightmap (1) + Item Dims (3)
+        else:
+            self.in_channels = 6 # Heightmap (1) + Weightmap (1) + Item Dims (3) + Item Weight (1)
+            
+        # Initialize the TS-GNN stream
+        if not exclude_eta:
+            self.temporal_gnn = TemporalGraphAttention(node_features=8, hidden_dim=64)
         
         # 1. SHARED BACKBONE
         if self.use_sota:
@@ -90,23 +110,28 @@ class CNNMaskedActorCritic(nn.Module):
                 nn.ReLU(),
             )
         
-        # 2. ACTOR HEAD
-        self.actor_features = nn.Sequential(
-            init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), # Bottleneck
-            nn.Flatten(),
-            init_layer(nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')), 
-            nn.ReLU()
-        )
-        self.actor_linear = init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1]), gain=0.01) # Small gain for action logits
+        # Calculate dimension sizes for concatenation
+        spatial_actor_dim = 8 * bin_size[0] * bin_size[1]
+        spatial_critic_dim = 4 * bin_size[0] * bin_size[1]
+        temporal_dim = 0 if exclude_eta else 64
         
-        # 3. CRITIC HEAD
-        self.critic_features = nn.Sequential(
-            init_layer(nn.Conv2d(64, 4, kernel_size=1)), nn.ReLU(), # Bottleneck to 4
-            nn.Flatten(),
-            init_layer(nn.Linear(4 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')),
-            nn.ReLU()
+        # 2. ACTOR HEAD (Split to allow mid-stream fusion)
+        self.actor_conv = nn.Sequential(
+            init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), nn.Flatten()
         )
-        self.critic_linear = init_layer(nn.Linear(hidden_size, 1), gain=1.0)
+        self.actor_linear = nn.Sequential(
+            init_layer(nn.Linear(spatial_actor_dim + temporal_dim, hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1]), gain=0.01)
+        )
+        
+        # 3. CRITIC HEAD (Split to allow mid-stream fusion)
+        self.critic_conv = nn.Sequential(
+            init_layer(nn.Conv2d(64, 4, kernel_size=1)), nn.ReLU(), nn.Flatten()
+        )
+        self.critic_linear = nn.Sequential(
+            init_layer(nn.Linear(spatial_critic_dim + temporal_dim, hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Linear(hidden_size, 1), gain=1.0)
+        )
 
         # 4. MASK HEAD
         # Conv(64->8) -> ReLU -> Flatten -> Linear -> ReLU -> Linear -> ReLU
@@ -145,59 +170,45 @@ class CNNMaskedActorCritic(nn.Module):
         
         item_channels = item_dims.view(batch_size, 3, 1, 1).expand(batch_size, 3, l, w)
         weight_channels = item_weight.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
-        eta_channels = item_eta.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
+        
+        # ETA channels are removed. CNN processes geometry only.
         if self.in_channels == 4:
-            # Golden Model: Heightmap (1) + Item Dims (3)
             x = torch.cat([heightmap.unsqueeze(1), item_channels], dim=1)
-            
-        elif self.in_channels == 6 and self.exclude_eta:
-            # COG Constraint Model: Heightmap (1) + Weightmap (1) + Item Dims (3) + Item Weight (1)
-            x = torch.cat([
-                heightmap.unsqueeze(1), 
-                weightmap.unsqueeze(1), 
-                item_channels, 
-                weight_channels
-            ], dim=1)
-        
-        elif self.in_channels == 6 and self.exclude_cog:
-            # ETA Constraint Model: Heightmap (1) + Etamap (1) + Item Dims (3) + Item ETA (1)
-            x = torch.cat([
-                heightmap.unsqueeze(1), 
-                etamap.unsqueeze(1), 
-                item_channels, 
-                eta_channels
-            ], dim=1)
-            
-        elif self.in_channels == 8:
-            # ETA + COG Constraint Model: All channels
-            x = torch.cat([
-                heightmap.unsqueeze(1), 
-                weightmap.unsqueeze(1),
-                etamap.unsqueeze(1),
-                item_channels,
-                eta_channels,
-                weight_channels
-            ], dim=1)
-        else:
-            raise ValueError(f"Unrecognized number of input channels: {self.in_channels}")
-        
-        # --- Shared Backbone ---
+        elif self.in_channels == 6:
+            x = torch.cat([heightmap.unsqueeze(1), weightmap.unsqueeze(1), item_channels, weight_channels], dim=1)
+
+        # --- Shared Geometry Backbone ---
         features = self.backbone(x)
         
-        # --- Heads ---
-        actor_emb = self.actor_features(features)
-        logits = self.actor_linear(actor_emb)
+        actor_spatial = self.actor_conv(features)
+        critic_spatial = self.critic_conv(features)
         
-        # Apply mask to Actor (Logic: If passed mask < 0.5, it's invalid)
+        # --- Temporal Graph Stream ---
+        if not self.exclude_eta:
+            nodes = to_tensor(obs['graph_nodes'], self.device)
+            if nodes.dim() == 2: nodes = nodes.unsqueeze(0) 
+            
+            adj_mask = torch.tensor(obs['graph_adj'], dtype=torch.bool, device=self.device)
+            if adj_mask.dim() == 2: adj_mask = adj_mask.unsqueeze(0) 
+            
+            temporal_vector = self.temporal_gnn(nodes, adj_mask)
+            
+            # Fuse Spatial and Temporal Streams
+            actor_in = torch.cat([actor_spatial, temporal_vector], dim=1)
+            critic_in = torch.cat([critic_spatial, temporal_vector], dim=1)
+        else:
+            actor_in = actor_spatial
+            critic_in = critic_spatial
+            
+        # --- Final Linear Heads ---
+        logits = self.actor_linear(actor_in)
+        value = self.critic_linear(critic_in)
+        
         if mask is not None:
             mask_tensor = to_tensor(mask, self.device)
             if mask_tensor.dim() == 1: mask_tensor = mask_tensor.unsqueeze(0)
-            # Threshold at 0.5 because our Soft Mask uses 1e-3 for invalid
             logits = logits.masked_fill(mask_tensor < 0.5, float('-inf'))
-        
-        critic_emb = self.critic_features(features)
-        value = self.critic_linear(critic_emb)
-        
-        mask_pred = self.mask_head(features) 
+            
+        mask_pred = self.mask_head(features) # Kept intact so main.py's unpacking doesn't crash
         
         return logits, value, mask_pred

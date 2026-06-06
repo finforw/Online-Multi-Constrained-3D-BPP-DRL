@@ -28,7 +28,9 @@ class BinPackingEnv(gym.Env):
         self.observation_space = spaces.Dict({
             "heightmap": spaces.Box(low=0, high=bin_size[2], shape=(bin_size[0], bin_size[1]), dtype=np.int32),
             "weightmap": spaces.Box(low=0, high=bin_size[2], shape=(bin_size[0], bin_size[1]), dtype=np.float32),
-            "item": spaces.Box(low=1, high=max(bin_size), shape=(5,), dtype=np.float32)
+            "item": spaces.Box(low=1, high=max(bin_size), shape=(5,), dtype=np.float32),
+            "graph_nodes": spaces.Box(low=-1, high=np.inf, shape=(100, 8), dtype=np.float32),
+            "graph_adj": spaces.Box(low=0, high=1, shape=(100, 100), dtype=bool) # Boolean mask
         })
 
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
@@ -109,11 +111,76 @@ class BinPackingEnv(gym.Env):
         if np.all(next_mask == 1e-3): # penalty=0 for no valid actions; no more viable actions
             return next_obs, reward + PENALTY, True, False, {'cog_distance': self.cog_distance_to_center}
         return next_obs, reward, False, False, {}
+    
+    def get_graph_obs(self, max_nodes=100):
+        """
+        Translates the bin state into a directed graph for the Temporal-Spatial GNN.
+        Returns:
+            nodes: np.array of shape (max_nodes, 8) -> [l, w, h, x, y, z, weight, eta]
+            adj_mask: Boolean np.array of shape (max_nodes, max_nodes). 
+                      Note: True means NO edge (masked out). False means there IS an edge.
+        """
+        nodes = np.zeros((max_nodes, 8), dtype=np.float32)
+        adj_mask = np.ones((max_nodes, max_nodes), dtype=bool) 
+        
+        # --- THE FIX ---
+        # Ensure EVERY node (even the empty padded ones) has a self-loop.
+        # This prevents PyTorch from doing a softmax over an all -inf row, preventing NaNs.
+        np.fill_diagonal(adj_mask, False)
+        
+        num_placed = len(self.placed_items)
+        if num_placed > max_nodes - 1:
+            num_placed = max_nodes - 1 
+            
+        # 1. Populate nodes with already placed items
+        for i in range(num_placed):
+            item = self.placed_items[i]
+            x, y, z = item['pos']
+            l, w, h = item['size']
+            nodes[i] = [l, w, h, x, y, z, item['weight'], item['eta']]
+            
+            # (Self-loops are already handled by fill_diagonal above)
+            
+            # 2. Build temporal blocking edges among already placed items
+            for j in range(i):
+                p_item = self.placed_items[j]
+                p_x, p_y, p_z = p_item['pos']
+                p_l, p_w, p_h = p_item['size']
+                
+                is_in_front = (y + w) <= p_y
+                overlap_x = not (x + l <= p_x or x >= p_x + p_l)
+                
+                if is_in_front and overlap_x:
+                    adj_mask[i, j] = False 
+                    
+        # 3. Add the incoming item as the final active node
+        if self.current_item_index < len(self.items):
+            current_item = self.items[self.current_item_index]
+            nodes[num_placed] = [
+                current_item[0], current_item[1], current_item[2], 
+                -1, -1, -1,            
+                current_item[4],       
+                current_item[3]        
+            ]
+            
+            # Allow the incoming node to look at all placed nodes
+            adj_mask[num_placed, :num_placed] = False 
+
+        return nodes, adj_mask
 
     def get_obs(self):
-        if self.current_item_index >= len(self.items):
-            return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "etamap": self.etamap.copy(), "item": np.zeros(5, dtype=np.float32)}
-        return {"heightmap": self.heightmap.copy(), "weightmap": self.weightmap.copy(), "etamap": self.etamap.copy(), "item": self.items[self.current_item_index]}
+        nodes, adj_mask = self.get_graph_obs()
+        res = {
+            "heightmap": self.heightmap.copy(), 
+            "weightmap": self.weightmap.copy(),
+            "etamap": self.etamap.copy(), 
+            "item": np.zeros(5, dtype=np.float32),
+            "graph_nodes": nodes,
+            "graph_adj": adj_mask
+        }
+        if self.current_item_index < len(self.items):
+            res["item"] = self.items[self.current_item_index]
+        return res
 
     def _generate_items(self, seed=None, test_sequence=None):
         if test_sequence is not None:
