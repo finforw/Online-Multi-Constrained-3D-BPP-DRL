@@ -133,16 +133,21 @@ class CNNMaskedActorCritic(nn.Module):
             init_layer(nn.Linear(hidden_size, 1), gain=1.0)
         )
 
-        # 4. MASK HEAD
-        # Conv(64->8) -> ReLU -> Flatten -> Linear -> ReLU -> Linear -> ReLU
-        self.mask_head = nn.Sequential(
+        # 4. DECOUPLED AUXILIARY HEADS
+        # CNN Head: Predicts physical geometry
+        self.spatial_mask_head = nn.Sequential(
             init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), 
             nn.Flatten(),
-            init_layer(nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')),
-            nn.ReLU(),
-            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1]), gain=1.0),
-            nn.ReLU() 
+            init_layer(nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1])) # Output raw logits
         )
+        
+        # GNN Head: Predicts temporal/ETA logistics
+        if not exclude_eta:
+            self.temporal_mask_head = nn.Sequential(
+                init_layer(nn.Linear(64, hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
+                init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1])) # Output raw logits
+            )
 
         self.to(self.device)
 
@@ -209,6 +214,13 @@ class CNNMaskedActorCritic(nn.Module):
             if mask_tensor.dim() == 1: mask_tensor = mask_tensor.unsqueeze(0)
             logits = logits.masked_fill(mask_tensor < 0.5, float('-inf'))
             
-        mask_pred = self.mask_head(features) # Kept intact so main.py's unpacking doesn't crash
+        # --- DECOUPLED PREDICTIONS ---
+        spatial_mask_pred = self.spatial_mask_head(features)
         
-        return logits, value, mask_pred
+        if not self.exclude_eta:
+            temporal_mask_pred = self.temporal_mask_head(temporal_vector)
+        else:
+            temporal_mask_pred = torch.zeros_like(spatial_mask_pred)
+        
+        # Return 4 items now
+        return logits, value, spatial_mask_pred, temporal_mask_pred

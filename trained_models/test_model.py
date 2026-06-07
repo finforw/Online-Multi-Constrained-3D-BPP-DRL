@@ -50,7 +50,7 @@ def evaluate_model(model_path, dataset_path, args, device='cpu'):
             
             with torch.no_grad():
                 # Get action logits from Model (Deterministic)
-                logits, _, _ = model(obs)
+                logits, _, _, _ = model(obs) # Unpack 4 values
                 
                 # Apply Mask
                 # explicitly specify dtype=torch.float32 to prevent inference errors
@@ -106,7 +106,7 @@ def test_model(model, dataset_path, args, device='cpu'):
             
             with torch.no_grad():
                 # Get action logits from Model (Deterministic)
-                logits, _, _ = model(obs)
+                logits, _, _, _ = model(obs) # Unpack 4 values
                 
                 # Apply Mask
                 # explicitly specify dtype=torch.float32 to prevent inference errors

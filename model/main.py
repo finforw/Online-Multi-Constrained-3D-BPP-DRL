@@ -24,12 +24,12 @@ LEARNING_RATE = 3e-4
 MIN_LR = 1e-5
 EPISODES = 350000
 # mask pred loss
-# AUX_LOSS_WEIGHT = 0.5
+AUX_LOSS_WEIGHT = 0.5
 
 
 def choose_action_and_evaluate(model, obs, mask):
-    # Unpack 3 values
-    logits, state_value, mask_pred = model(obs) 
+    # Unpack 4 values
+    logits, state_value, spatial_mask_pred, temporal_mask_pred = model(obs)
     
     probs = torch.softmax(logits, dim=-1)
     mask_tensor = to_tensor(mask, model.device)
@@ -52,7 +52,7 @@ def choose_action_and_evaluate(model, obs, mask):
     log_prob = dist.log_prob(action_tensor)
     
     # Return mask_pred for training
-    return int(action), log_prob, state_value, e_inf, dist.entropy(), mask_pred
+    return int(action), log_prob, state_value, e_inf, dist.entropy(), spatial_mask_pred, temporal_mask_pred
 
 def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
     """Calculates the target returns (R) for the entire rollout."""
@@ -63,13 +63,26 @@ def calculate_returns(rewards, next_value, done, gamma=0.95, device='cpu'):
         returns.insert(0, R)
     return torch.tensor(returns, dtype=torch.float32, device=device)
 
-def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=PSI):
+def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
+                      spatial_preds, temporal_preds, true_phys_masks, true_eta_masks, psi=PSI):
     # Flatten RL tensors
     values = torch.cat(values).view(-1)
     log_probs = torch.stack(log_probs).view(-1)
     returns = returns.to(values.device).view(-1)
     entropies = torch.stack(entropies).view(-1)
     e_infs = torch.stack(e_infs).view(-1)
+
+    # --- 1. DECOUPLED AUXILIARY LOSSES ---
+    s_preds = torch.cat(spatial_preds).view(-1, 100)
+    t_preds = torch.cat(temporal_preds).view(-1, 100)
+    
+    # Convert ground truth masks (1e-3 / 1.0) into strict binary floats (0.0 / 1.0)
+    phys_targets = (torch.stack(true_phys_masks).view(-1, 100) > 0.5).float()
+    eta_targets = (torch.stack(true_eta_masks).view(-1, 100) > 0.5).float()
+    
+    bce_loss = nn.BCEWithLogitsLoss()
+    spatial_loss = bce_loss(s_preds, phys_targets)
+    temporal_loss = bce_loss(t_preds, eta_targets)
 
     # --- RL Update ---
     advantages = returns - values.detach()
@@ -86,7 +99,8 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
     loss = (ALPHA * actor_loss + 
             BETA * critic_loss + 
             OMEGA * e_infs.mean() - 
-            psi * entropies.mean())
+            psi * entropies.mean() +
+            AUX_LOSS_WEIGHT * (spatial_loss + temporal_loss))
 
     optimizer.zero_grad()
     loss.backward()
@@ -96,17 +110,23 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
 def run_episode_and_train(model, optimizer, criterion, env, discount_factor, seed=None, psi=PSI):
     obs, _ = env.reset(seed=seed)
     
-    # Buffers (mask_preds and true_masks removed)
     values, log_probs, rewards, entropies, e_infs = [], [], [], [], []
+    spatial_preds, temporal_preds = [], []
+    true_phys_masks, true_eta_masks = [], []
     
     total_rewards = 0
     steps_taken = 0
     
     while True:
-        mask = env.get_action_mask(obs) 
+        mask = env.get_action_mask(obs)
+        phys_mask, eta_mask = env.get_auxiliary_masks(obs)
         
-        # Unpack (mask_pred is returned by the model to prevent unpack errors, but safely ignored with '_')
-        action, log_prob, state_value, e_inf, e_entropy, _ = choose_action_and_evaluate(model, obs, mask)
+        action, log_prob, state_value, e_inf, e_entropy, s_pred, t_pred = choose_action_and_evaluate(model, obs, mask)
+
+        spatial_preds.append(s_pred)
+        temporal_preds.append(t_pred)
+        true_phys_masks.append(torch.tensor(phys_mask, dtype=torch.float32, device=model.device))
+        true_eta_masks.append(torch.tensor(eta_mask, dtype=torch.float32, device=model.device))
 
         next_obs, reward, done, truncated, other = env.step(action)
 
@@ -122,12 +142,12 @@ def run_episode_and_train(model, optimizer, criterion, env, discount_factor, see
 
         if done or truncated:
             with torch.no_grad():
-                _, final_value, _ = model(next_obs)
+                _, final_value, _, _ = model(next_obs)
             
             returns = calculate_returns(rewards, final_value.item(), done, discount_factor, device=model.device)
             
-            # Training step directly utilizing raw A2C gradients
-            a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, psi=psi)
+            a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs, 
+                              spatial_preds, temporal_preds, true_phys_masks, true_eta_masks, psi=psi)
             
             avg_ep_entropy = torch.stack(entropies).mean().item()
             return total_rewards, steps_taken, env.placed_items, avg_ep_entropy, other['cog_distance']

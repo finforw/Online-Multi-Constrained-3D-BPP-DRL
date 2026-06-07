@@ -193,6 +193,33 @@ class BinPackingEnv(gym.Env):
         # self.items.sort(key=lambda x: x[3])
         self.current_item_index = 0
     
+    def get_auxiliary_masks(self, obs):
+        """
+        Generates decoupled ground-truth masks to train the CNN and GNN independently.
+        """
+        phys_mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
+        eta_mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
+        current_item_eta = obs['item'][3]
+        
+        for action in range(len(phys_mask)):
+            x, y = divmod(action, self.bin_size[1])
+            item_l, item_w, item_h = map(int, obs['item'][:3])
+            
+            # Bounds check (shared baseline)
+            if x + item_l > self.bin_size[0] or y + item_w > self.bin_size[1]: continue
+            current_max_h = np.max(self.heightmap[x:x+item_l, y:y+item_w])
+            if current_max_h + item_h > self.bin_size[2]: continue
+            
+            # 1. PHYSICAL ONLY
+            if self._physical_stability_check(x, y, item_l, item_w, current_max_h):
+                phys_mask[action] = 1.0
+                
+            # 2. TEMPORAL ONLY (Assuming it physically fits, does it block?)
+            if not self.enable_eta_check or self._eta_blocking_check(x, y, item_l, item_w, current_item_eta):
+                eta_mask[action] = 1.0
+                
+        return phys_mask, eta_mask
+    
     def get_action_mask(self, obs):
         # Initialize with the "Magic Number" (0.001) instead of 0.0
         # This prevents the Dead ReLU problem in the Mask Head.
