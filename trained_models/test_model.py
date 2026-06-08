@@ -10,11 +10,20 @@ def evaluate_model(model_path, dataset_path, args, device='cpu'):
     
     # 1. Load Weights
     checkpoint = torch.load(model_path, map_location=device)
-    in_channels = checkpoint['backbone.0.weight'].shape[1]
-    print(f"Detected {in_channels} input channels for this model.")
+    # Auto-Detect COG constraint based on CNN input channels
+    if 'backbone.0.weight' in checkpoint:
+        in_channels = checkpoint['backbone.0.weight'].shape[1]
+    else:
+        in_channels = 4 # Default fallback
+        
+    auto_exclude_cog = (in_channels == 4)
+
+    # Auto-Detect ETA constraint based on Actor linear layer size
+    actor_weight_shape = checkpoint['actor_linear.0.weight'].shape[1]
+    auto_exclude_eta = (actor_weight_shape == 800) # 800 = Spatial only. 864 = Spatial + Temporal
 
     # 2. Load Model Architecture
-    model = CNNMaskedActorCritic(bin_size=(10, 10, 10), hidden_size=256, device=device, exclude_eta=args.noeta, exclude_cog=args.nocog, use_sota=args.golden)
+    model = CNNMaskedActorCritic(bin_size=(10, 10, 10), hidden_size=256, device=device, exclude_eta=auto_exclude_eta, exclude_cog=auto_exclude_cog, use_sota=args.golden)
 
     model.load_state_dict(checkpoint)
     model.to(device)
