@@ -35,7 +35,7 @@ def evaluate_model(model_path, dataset_path, args, device='cpu'):
     test_data = torch.load(dataset_path)
     print(f"Found {len(test_data)} test cases.")
 
-    env = BinPackingEnv(bin_size=(10, 10, 10), exclude_eta=args.noeta, exclude_cog=args.nocog)
+    env = BinPackingEnv(bin_size=(10, 10, 10), exclude_eta=auto_exclude_eta, exclude_cog=auto_exclude_cog)
     
     total_rewards = []
     utilizations = []
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     evaluate_model(
-        model_path="trained_models/ours/eta/eta.pt",
+        model_path="trained_models/ours/pure_vanilla/vanilla_gnn.pt",
         dataset_path="test_data/cut_1_temporal.pt",
         args=args,
         device="cuda" if torch.cuda.is_available() else "cpu"
