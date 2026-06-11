@@ -30,9 +30,15 @@ class TemporalGraphAttention(nn.Module):
 
     def forward(self, nodes, adj_mask):
         x = self.node_embedder(nodes)
-        attn_out, _ = self.gat(query=x, key=x, value=x, attn_mask=adj_mask[0])
+        
+        # Expand the float mask for the Multihead Attention layer
+        # adj_mask shape is (Batch, Nodes, Nodes). We repeat it for each head.
+        mask_for_heads = adj_mask.repeat_interleave(self.gat.num_heads, dim=0)
+        
+        attn_out, _ = self.gat(query=x, key=x, value=x, attn_mask=mask_for_heads)
         x = self.layer_norm(x + attn_out)
-        return x.mean(dim=1) # Global pooling of temporal tension
+        
+        return x.mean(dim=1) # Global Graph Pooling
 
 class SpatialSelfAttention(nn.Module):
     def __init__(self, in_channels):
@@ -193,7 +199,8 @@ class CNNMaskedActorCritic(nn.Module):
             nodes = to_tensor(obs['graph_nodes'], self.device)
             if nodes.dim() == 2: nodes = nodes.unsqueeze(0) 
             
-            adj_mask = torch.tensor(obs['graph_adj'], dtype=torch.bool, device=self.device)
+            # THE FIX: Cast as float32 instead of bool
+            adj_mask = torch.tensor(obs['graph_adj'], dtype=torch.float32, device=self.device)
             if adj_mask.dim() == 2: adj_mask = adj_mask.unsqueeze(0) 
             
             temporal_vector = self.temporal_gnn(nodes, adj_mask)

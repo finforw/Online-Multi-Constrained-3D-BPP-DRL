@@ -30,7 +30,7 @@ class BinPackingEnv(gym.Env):
             "weightmap": spaces.Box(low=0, high=bin_size[2], shape=(bin_size[0], bin_size[1]), dtype=np.float32),
             "item": spaces.Box(low=1, high=max(bin_size), shape=(5,), dtype=np.float32),
             "graph_nodes": spaces.Box(low=-1, high=np.inf, shape=(100, 8), dtype=np.float32),
-            "graph_adj": spaces.Box(low=0, high=1, shape=(100, 100), dtype=bool) # Boolean mask
+            "graph_adj": spaces.Box(low=-np.inf, high=np.inf, shape=(100, 100), dtype=np.float32)
         })
 
         self.heightmap = np.zeros((self.bin_size[0], self.bin_size[1]), dtype=np.int32)
@@ -113,35 +113,25 @@ class BinPackingEnv(gym.Env):
         return next_obs, reward, False, False, {}
     
     def get_graph_obs(self, max_nodes=100):
-        """
-        Translates the bin state into a directed graph for the Temporal-Spatial GNN.
-        Returns:
-            nodes: np.array of shape (max_nodes, 8) -> [l, w, h, x, y, z, weight, eta]
-            adj_mask: Boolean np.array of shape (max_nodes, max_nodes). 
-                      Note: True means NO edge (masked out). False means there IS an edge.
-        """
         nodes = np.zeros((max_nodes, 8), dtype=np.float32)
-        adj_mask = np.ones((max_nodes, max_nodes), dtype=bool) 
         
-        # --- THE FIX ---
-        # Ensure EVERY node (even the empty padded ones) has a self-loop.
-        # This prevents PyTorch from doing a softmax over an all -inf row, preventing NaNs.
-        np.fill_diagonal(adj_mask, False)
+        # 1. Initialize with -infinity. In PyTorch Attention, -inf means "DO NOT ATTEND"
+        adj_weight = np.full((max_nodes, max_nodes), float('-inf'), dtype=np.float32)
+        
+        # 2. Self-loops are 0.0 (Neutral baseline attention)
+        np.fill_diagonal(adj_weight, 0.0) 
         
         num_placed = len(self.placed_items)
         if num_placed > max_nodes - 1:
             num_placed = max_nodes - 1 
             
-        # 1. Populate nodes with already placed items
         for i in range(num_placed):
             item = self.placed_items[i]
             x, y, z = item['pos']
             l, w, h = item['size']
             nodes[i] = [l, w, h, x, y, z, item['weight'], item['eta']]
             
-            # (Self-loops are already handled by fill_diagonal above)
-            
-            # 2. Build temporal blocking edges among already placed items
+            # Build continuous temporal blocking edges
             for j in range(i):
                 p_item = self.placed_items[j]
                 p_x, p_y, p_z = p_item['pos']
@@ -151,9 +141,16 @@ class BinPackingEnv(gym.Env):
                 overlap_x = not (x + l <= p_x or x >= p_x + p_l)
                 
                 if is_in_front and overlap_x:
-                    adj_mask[i, j] = False 
+                    delta_eta = item['eta'] - p_item['eta']
+                    if delta_eta > 0:
+                        # SEVERE BLOCK: Add a positive scalar to force the network's attention
+                        # Divided by 42 (max ETA) to normalize, multiplied by 5.0 to dominate softmax
+                        adj_weight[i, j] = (delta_eta / 42.0) * 5.0 
+                    else:
+                        # Physically in front, but temporally valid (ETA_i <= ETA_j)
+                        adj_weight[i, j] = 0.0 
                     
-        # 3. Add the incoming item as the final active node
+        # 3. Add the incoming item
         if self.current_item_index < len(self.items):
             current_item = self.items[self.current_item_index]
             nodes[num_placed] = [
@@ -163,10 +160,17 @@ class BinPackingEnv(gym.Env):
                 current_item[3]        
             ]
             
-            # Allow the incoming node to look at all placed nodes
-            adj_mask[num_placed, :num_placed] = False 
+            # The incoming node broadcasts its potential "Danger" to all placed nodes
+            current_eta = current_item[3]
+            for j in range(num_placed):
+                p_eta = nodes[j][7]
+                delta_eta = current_eta - p_eta
+                if delta_eta > 0:
+                    adj_weight[num_placed, j] = (delta_eta / 42.0) * 5.0
+                else:
+                    adj_weight[num_placed, j] = 0.0
 
-        return nodes, adj_mask
+        return nodes, adj_weight
 
     def get_obs(self):
         nodes, adj_mask = self.get_graph_obs()
