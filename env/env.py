@@ -13,7 +13,7 @@ from data import cutter
 # Hyperparameters for reward calculation.
 ALPHA = 10.0
 BETA = 2.0
-GAMMA = 0.25
+GAMMA = 2.0
 PENALTY = 0.0
 
 class BinPackingEnv(gym.Env):
@@ -97,10 +97,41 @@ class BinPackingEnv(gym.Env):
         # 2. COG Modifier (Self.beta scales the impact)
         cog_modifier = self.beta * cog_reward
         
-        # 3. Total Reward
-        # We drop the ETA reward entirely because the get_action_mask() strictly 
-        # prevents ETA violations. Don't punish valid topological placements!
-        reward = base_reward + cog_modifier
+        # 3. Dense Temporal Cohesion Modifier (Self.gamma scales the impact)
+        temporal_modifier = 0.0
+        if self.enable_eta_check:
+            TAU = 10.0 # Sensitivity tuning. ETA ranges up to 42.
+            cohesion_score = 0.0
+            
+            # Evaluate adjacency against all previously placed items
+            for placed in self.placed_items[:-1]:
+                p_x, p_y, p_z = placed['pos']
+                p_l, p_w, p_h = placed['size']
+                p_eta = placed['eta']
+                
+                # Check for physical adjacency (touching faces)
+                overlap_x = max(0, min(x + item_l, p_x + p_l) - max(x, p_x)) > 0
+                overlap_y = max(0, min(y + item_w, p_y + p_w) - max(y, p_y)) > 0
+                overlap_z = max(0, min(current_max_height + item_h, p_z + p_h) - max(current_max_height, p_z)) > 0
+                
+                touch_x = (x == p_x + p_l) or (p_x == x + item_l)
+                touch_y = (y == p_y + p_w) or (p_y == y + item_w)
+                touch_z = (current_max_height == p_z + p_h) or (p_z == current_max_height + item_h)
+                
+                if (touch_x and overlap_y and overlap_z) or \
+                   (touch_y and overlap_x and overlap_z) or \
+                   (touch_z and overlap_x and overlap_y):
+                    
+                    delta_eta = abs(arrival_time - p_eta)
+                    cohesion_score += np.exp(-delta_eta / TAU)
+                    
+            # Scale cohesion score by the volume of the box to prevent reward farming
+            temporal_modifier = self.gamma * (cohesion_score * box_reward)
+
+        # 4. Total Reward
+        reward = base_reward + cog_modifier + temporal_modifier
+        print(f"Base reward: {base_reward:.4f}, Temporal mod: {temporal_modifier:.4f}, Total: {reward:.4f}")
+
         # A minimum of 0.01 for any successful placement.
         reward = max(0.01, reward)
 
