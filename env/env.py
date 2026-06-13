@@ -130,7 +130,6 @@ class BinPackingEnv(gym.Env):
 
         # 4. Total Reward
         reward = base_reward + cog_modifier + temporal_modifier
-        print(f"Base reward: {base_reward:.4f}, Temporal mod: {temporal_modifier:.4f}, Total: {reward:.4f}")
 
         # A minimum of 0.01 for any successful placement.
         reward = max(0.01, reward)
