@@ -76,11 +76,13 @@ class CNNMaskedActorCritic(nn.Module):
         self.use_sota = use_sota
         self.exclude_eta = exclude_eta
         self.exclude_cog = exclude_cog
-        # The CNN NEVER sees the ETA map anymore. It handles geometry only.
-        if exclude_cog:
-            self.in_channels = 4 # Heightmap (1) + Item Dims (3)
-        else:
-            self.in_channels = 6 # Heightmap (1) + Weightmap (1) + Item Dims (3) + Item Weight (1)
+        
+        # Dynamically Calculate CNN Input Channels
+        self.in_channels = 4 # Base: Heightmap (1) + Item Dims (3)
+        if not exclude_cog:
+            self.in_channels += 2 # Weightmap (1) + Item Weight (1)
+        if not exclude_eta:
+            self.in_channels += 2 # Etamap (1) + Item ETA (1)
             
         # Initialize the TS-GNN stream
         if not exclude_eta:
@@ -180,13 +182,24 @@ class CNNMaskedActorCritic(nn.Module):
         l, w = self.bin_size[0], self.bin_size[1]
         
         item_channels = item_dims.view(batch_size, 3, 1, 1).expand(batch_size, 3, l, w)
-        weight_channels = item_weight.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
+        # Dynamically stack channels to ensure backwards compatibility
+        channels_to_cat = [heightmap.unsqueeze(1)]
         
-        # ETA channels are removed. CNN processes geometry only.
-        if self.in_channels == 4:
-            x = torch.cat([heightmap.unsqueeze(1), item_channels], dim=1)
-        elif self.in_channels == 6:
-            x = torch.cat([heightmap.unsqueeze(1), weightmap.unsqueeze(1), item_channels, weight_channels], dim=1)
+        if not self.exclude_cog:
+            channels_to_cat.append(weightmap.unsqueeze(1))
+            
+        channels_to_cat.append(item_channels)
+        
+        if not self.exclude_cog:
+            weight_channels = item_weight.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
+            channels_to_cat.append(weight_channels)
+            
+        if not self.exclude_eta:
+            eta_channels = item_eta.view(batch_size, 1, 1, 1).expand(batch_size, 1, l, w)
+            channels_to_cat.append(etamap.unsqueeze(1))
+            channels_to_cat.append(eta_channels)
+            
+        x = torch.cat(channels_to_cat, dim=1)
 
         # --- Shared Geometry Backbone ---
         features = self.backbone(x)
