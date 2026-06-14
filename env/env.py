@@ -21,8 +21,8 @@ class BinPackingEnv(gym.Env):
         super(BinPackingEnv, self).__init__()
         self.bin_size = bin_size
         
-        # Action space: (x, y) coordinates for the front-bottom-left corner of the item
-        self.action_space = spaces.Discrete(bin_size[0] * bin_size[1])
+        # Action space: 100 for standard orientation, 100 for 90-degree Z-rotated
+        self.action_space = spaces.Discrete(2 * bin_size[0] * bin_size[1])
         
         # Observation: Current heightmap + Current item dimensions (l, w, h, arrival_time, weight)
         self.observation_space = spaces.Dict({
@@ -65,10 +65,19 @@ class BinPackingEnv(gym.Env):
         # 1. Apply the action and update the observation space
         # 2. Calculate reward and whether the episode is done
         
-        # Action will be bottom-left-front corner of the item placement.
-        x, y = divmod(action, self.bin_size[1])
+        # Decode orientation and spatial position
+        grid_size = self.bin_size[0] * self.bin_size[1]
+        orientation = action // grid_size
+        spatial_action = action % grid_size
+        x, y = divmod(spatial_action, self.bin_size[1])
+
         raw_data = self.items[self.current_item_index]
         item_l, item_w, item_h = map(int, raw_data[:3])
+
+        # Apply Z-axis rotation (swap length and width)
+        if orientation == 1:
+            item_l, item_w = item_w, item_l
+
         arrival_time, weight = raw_data[3:]
 
         # Update heightmap and next item index.
@@ -231,13 +240,19 @@ class BinPackingEnv(gym.Env):
         """
         Generates decoupled ground-truth masks to train the CNN and GNN independently.
         """
-        phys_mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
-        eta_mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
+        grid_size = self.bin_size[0] * self.bin_size[1]
+        phys_mask = np.full(grid_size * 2, 1e-3, dtype=np.float32)
+        eta_mask = np.full(grid_size * 2, 1e-3, dtype=np.float32)
         current_item_eta = obs['item'][3]
         
         for action in range(len(phys_mask)):
-            x, y = divmod(action, self.bin_size[1])
+            orientation = action // grid_size
+            spatial_action = action % grid_size
+            x, y = divmod(spatial_action, self.bin_size[1])
+
             item_l, item_w, item_h = map(int, obs['item'][:3])
+            if orientation == 1:
+                item_l, item_w = item_w, item_l
             
             # Bounds check (shared baseline)
             if x + item_l > self.bin_size[0] or y + item_w > self.bin_size[1]: continue
@@ -257,12 +272,18 @@ class BinPackingEnv(gym.Env):
     def get_action_mask(self, obs):
         # Initialize with the "Magic Number" (0.001) instead of 0.0
         # This prevents the Dead ReLU problem in the Mask Head.
-        mask = np.full(self.bin_size[0] * self.bin_size[1], 1e-3, dtype=np.float32)
+        grid_size = self.bin_size[0] * self.bin_size[1]
+        mask = np.full(grid_size * 2, 1e-3, dtype=np.float32)
         current_item_eta = obs['item'][3] # arrival_time is index 3
         
         for action in range(len(mask)):
-            x, y = divmod(action, self.bin_size[1])
+            orientation = action // grid_size
+            spatial_action = action % grid_size
+            x, y = divmod(spatial_action, self.bin_size[1])
+
             item_l, item_w, item_h = map(int, obs['item'][:3])
+            if orientation == 1:
+                item_l, item_w = item_w, item_l
             
             # 1) Boundary Check
             if x + item_l > self.bin_size[0] or y + item_w > self.bin_size[1]:

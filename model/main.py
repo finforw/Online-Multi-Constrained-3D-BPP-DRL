@@ -73,12 +73,12 @@ def a2c_training_step(optimizer, values, log_probs, returns, entropies, e_infs,
     e_infs = torch.stack(e_infs).view(-1)
 
     # --- 1. DECOUPLED AUXILIARY LOSSES ---
-    s_preds = torch.cat(spatial_preds).view(-1, 100)
-    t_preds = torch.cat(temporal_preds).view(-1, 100)
+    s_preds = torch.cat(spatial_preds).view(-1, 200)
+    t_preds = torch.cat(temporal_preds).view(-1, 200)
     
     # Convert ground truth masks (1e-3 / 1.0) into strict binary floats (0.0 / 1.0)
-    phys_targets = (torch.stack(true_phys_masks).view(-1, 100) > 0.5).float()
-    eta_targets = (torch.stack(true_eta_masks).view(-1, 100) > 0.5).float()
+    phys_targets = (torch.stack(true_phys_masks).view(-1, 200) > 0.5).float()
+    eta_targets = (torch.stack(true_eta_masks).view(-1, 200) > 0.5).float()
     
     bce_loss = nn.BCEWithLogitsLoss()
     spatial_loss = bce_loss(s_preds, phys_targets)

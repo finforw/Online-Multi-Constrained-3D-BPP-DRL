@@ -129,7 +129,7 @@ class CNNMaskedActorCritic(nn.Module):
         )
         self.actor_linear = nn.Sequential(
             init_layer(nn.Linear(spatial_actor_dim + temporal_dim, hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1]), gain=0.01)
+            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1] * 2), gain=0.01) # 200 actions
         )
         
         # 3. CRITIC HEAD (Split to allow mid-stream fusion)
@@ -147,14 +147,14 @@ class CNNMaskedActorCritic(nn.Module):
             init_layer(nn.Conv2d(64, 8, kernel_size=1)), nn.ReLU(), 
             nn.Flatten(),
             init_layer(nn.Linear(8 * bin_size[0] * bin_size[1], hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1])) # Output raw logits
+            init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1] * 2)) # Output 200 raw logits
         )
         
         # GNN Head: Predicts temporal/ETA logistics
         if not exclude_eta:
             self.temporal_mask_head = nn.Sequential(
                 init_layer(nn.Linear(64, hidden_size), gain=nn.init.calculate_gain('relu')), nn.ReLU(),
-                init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1])) # Output raw logits
+                init_layer(nn.Linear(hidden_size, bin_size[0] * bin_size[1] * 2)) # Output 200 raw logits
             )
 
         self.to(self.device)
