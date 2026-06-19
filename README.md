@@ -58,9 +58,9 @@ Average Utilization: 69.590%
 Average COG Distance: 1.453
 
 Hard constraints on ETA:
-Average Reward: 7.565
-Average Utilization: 64.178%
-Average COG Distance: 1.54
+Average Reward: 6.705
+Average Utilization: 64.301%
+Average COG Distance: 1.52
 
 Soft constraints on COG plus hard constraints on ETA:
 Average Reward: 6.894
