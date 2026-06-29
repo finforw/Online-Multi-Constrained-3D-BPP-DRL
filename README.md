@@ -7,62 +7,26 @@ python -m model.main
 # Run evaluation
 python -m trained_models.test_model
 
-## Golden Model Results
-Cut-1:
-Average Reward: 6.387
-Average Utilization: 67.990%
-
-Fizz-Fuzz:
-Average Reward: 6.496
-Average Utilization: 69.095%
-
 ## Model Results (Updated)
 
-SOTA with soft constraints:
-Average Reward: 8.088
-Average Utilization: 71.021%
-Average COG Distance: 1.478
+| Method | Configuration | Average Reward | Average Utilization | Average COG Distance |
+| --- | --- | ---: | ---: | ---: |
+| SOTA | Soft constraints | 8.088 | 71.021% | 1.478 |
+| SOTA | Soft + hard constraints | 4.260 | 35.873% | 2.835 |
 
-SOTA with soft and hard constraints:
-Average Reward: 4.260
-Average Utilization: 35.873%
-Average COG Distance: 2.835
+### SOTA Trained with Constraints Results
 
-SOTA Trained with Constraints Results:
+| Configuration | Average Reward | Average Utilization | Average COG Distance |
+| --- | ---: | ---: | ---: |
+| No constraints | 7.102 | 71.021% | 1.478 |
+| Soft constraints on COG | 7.686 | 66.809% | 1.396 |
+| Soft constraints on COG + hard constraints on ETA | 6.747 | 58.075% | 1.679 |
 
-No constraints:
-Average Reward: 7.102
-Average Utilization: 71.021%
-Average COG Distance: 1.478
+### Our Model Results
 
-Soft constraints on COG:
-Average Reward: 7.686
-Average Utilization: 66.809%
-Average COG Distance: 1.396
-
-Soft constraints on COG plus hard constraints on ETA:
-Average Reward: 6.747
-Average Utilization: 58.075%
-Average COG Distance: 1.679
-
-Our Model Results:
-
-No constraints:
-Average Reward: 7.910
-Average Utilization: 79.098%
-Average COG Distance: 1.374
-
-Soft constraints on COG (negative reward):
-Average Reward: 7.951
-Average Utilization: 69.590%
-Average COG Distance: 1.453
-
-Hard constraints on ETA:
-Average Reward: 6.705
-Average Utilization: 64.301%
-Average COG Distance: 1.52
-
-Soft constraints on COG plus hard constraints on ETA:
-Average Reward: 6.894
-Average Utilization: 59.417%
-Average COG Distance: 1.637
+| Configuration | Average Reward | Average Utilization | Average COG Distance |
+| --- | ---: | ---: | ---: |
+| No constraints | 7.910 | 79.098% | 1.374 |
+| Soft constraints on COG (negative reward) | 7.951 | 69.590% | 1.453 |
+| Hard constraints on ETA | 6.705 | 64.301% | 1.520 |
+| Soft constraints on COG + hard constraints on ETA | ? | ? | ? |
